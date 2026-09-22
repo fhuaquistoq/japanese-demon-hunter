@@ -193,8 +193,6 @@ MonoBehaviour:
     - line: '|   bundleVersion: 0.1.0'
     - line: '|   preloadedAssets:'
     - line: '|   - {fileID: 11400000, guid: ef1295a6857042843a1dcb578c0550e0, type: 2}'
-    - line: '|   - {fileID: 4177014630212636400, guid: 09ee69611b5f29949993fff72c871e49, type: 2}'
-    - line: '|   - {fileID: -296471629310925790, guid: d813bdafa65769940b6ef85a2034072a, type: 2}'
     - line: '|   - {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}'
     - line: '|   metroInputSource: 0'
     - line: '|   wsaTransparentSwapchain: 0'
