@@ -1,0 +1,17 @@
+{
+    "name": "JapaneseDemonHunter.Monsters",
+    "rootNamespace": "JapaneseDemonHunter.Monsters",
+    "references": [
+        "JapaneseDemonHunter.Prototype",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

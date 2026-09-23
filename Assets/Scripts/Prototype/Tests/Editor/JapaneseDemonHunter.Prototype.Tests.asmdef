@@ -1,0 +1,25 @@
+{
+    "name": "JapaneseDemonHunter.Prototype.Tests",
+    "rootNamespace": "JapaneseDemonHunter.Prototype.Tests",
+    "references": [
+        "JapaneseDemonHunter.Prototype"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
