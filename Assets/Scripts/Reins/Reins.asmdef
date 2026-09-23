@@ -2,7 +2,8 @@
   "name": "Reins",
   "rootNamespace": "Reins",
   "references": [
-    "Oculus.Interaction"
+    "Oculus.Interaction",
+    "JapaneseDemonHunter.Prototype"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

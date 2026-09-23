@@ -43,14 +43,14 @@ namespace Reins
         private bool _armed = true;
 
         public ReinGestureStateMachine(
-            float liftThreshold = 0.18f,
-            float dropThreshold = 0.16f,
-            float brakeThreshold = 0.22f,
-            float laneThreshold = 0.24f,
+            float liftThreshold = 0.12f,
+            float dropThreshold = 0.12f,
+            float brakeThreshold = 0.16f,
+            float laneThreshold = 0.18f,
             float rearmRadius = 0.12f,
-            float cooldownSeconds = 0.55f,
-            float liftWindowSeconds = 0.8f,
-            float minimumDropSpeed = 0.45f)
+            float cooldownSeconds = 0.4f,
+            float liftWindowSeconds = 3f,
+            float minimumDropSpeed = 0.35f)
         {
             _liftThreshold = liftThreshold;
             _dropThreshold = dropThreshold;
@@ -72,7 +72,11 @@ namespace Reins
 
             deltaTime = Mathf.Max(0f, deltaTime);
             _cooldown = Mathf.Max(0f, _cooldown - deltaTime);
-            if (pull.sqrMagnitude <= _rearmRadius * _rearmRadius)
+
+            // The rein becomes ready again once it is back in its neutral zone, or simply lowered
+            // back down. Without the height test a fresh lash would be impossible whenever the rope
+            // hangs away from its resting point.
+            if (pull.sqrMagnitude <= _rearmRadius * _rearmRadius || pull.y <= _liftThreshold * 0.5f)
             {
                 _armed = true;
             }
@@ -81,9 +85,15 @@ namespace Reins
             var downwardSpeed = deltaTime > 0f ? (_previousY - pull.y) / deltaTime : 0f;
             _previousY = pull.y;
 
-            if (_lifted && _liftAge > _liftWindowSeconds)
+            if (_lifted)
             {
-                _lifted = false;
+                // Keep following the top of the stroke: a player who keeps raising the hand must not
+                // have their later yank measured from the first frame that crossed the threshold.
+                _liftPeak = Mathf.Max(_liftPeak, pull.y);
+                if (_liftAge > _liftWindowSeconds)
+                {
+                    _lifted = false;
+                }
             }
 
             if (_lifted && _liftAge <= _liftWindowSeconds &&
@@ -140,6 +150,15 @@ namespace Reins
             Handedness expected, Handedness actual, bool selected, bool connected, bool trackedDataValid)
         {
             return selected && connected && trackedDataValid && expected == actual;
+        }
+
+        /// <summary>
+        /// Permissive variant: either hand may pull any part of the rope. Useful while the grasp
+        /// gesture is being tuned, because the player never has to match a specific side.
+        /// </summary>
+        public static bool CanDriveWithEitherHand(bool selected, bool connected, bool trackedDataValid)
+        {
+            return selected && connected && trackedDataValid;
         }
 
         public static bool ShouldReturnToRest(bool anyInteractorSelected)

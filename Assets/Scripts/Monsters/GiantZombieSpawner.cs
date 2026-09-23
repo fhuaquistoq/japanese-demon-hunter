@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using JapaneseDemonHunter.Prototype;
 using UnityEngine;
 
 namespace JapaneseDemonHunter.Monsters
@@ -17,8 +18,19 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField, Min(0.1f)] private float retryInterval = 1f;
         [SerializeField, Min(0f)] private float groundClearance = 0.02f;
 
+        [Header("Aparición por velocidad (opcional)")]
+        [SerializeField] private bool spawnWhenSpeedDrops;
+        [SerializeField, Min(0f)] private float speedThreshold = 1.5f;
+        [SerializeField, Min(0f)] private float slowSpeedDuration = 2.5f;
+        [SerializeField, Min(0f)] private float armDistance = 30f;
+        [SerializeField] private MonoBehaviour speedSource;
+
         private GiantZombieController spawnedGiant;
         private float nextSpawnAttempt;
+        private ICartSpeedPenaltyReceiver speedReceiver;
+        private float slowElapsed;
+        private Vector3 startPosition;
+        private bool startCaptured;
 
         public GiantZombieController SpawnedGiant => spawnedGiant;
         public bool HasSpawnedGiant => spawnedGiant != null;
@@ -27,17 +39,96 @@ namespace JapaneseDemonHunter.Monsters
         public Transform CartRearReachPoint => cartRearReachPoint;
         public float InitialDistance => initialDistance;
         public float RetryInterval => retryInterval;
+        public bool SpawnWhenSpeedDrops => spawnWhenSpeedDrops;
+        public float SpeedThreshold => speedThreshold;
+        public float SlowSpeedDuration => slowSpeedDuration;
+        public float ArmDistance => armDistance;
 
         private void Start()
         {
+            if (spawnWhenSpeedDrops)
+            {
+                speedReceiver = speedSource as ICartSpeedPenaltyReceiver;
+                if (cartTransform != null)
+                {
+                    startPosition = cartTransform.position;
+                    startCaptured = true;
+                }
+
+                return;
+            }
+
             TrySpawnGiant();
         }
 
         private void Update()
         {
-            if (spawnedGiant == null && Time.time >= nextSpawnAttempt)
+            if (spawnedGiant != null)
+            {
+                return;
+            }
+
+            if (spawnWhenSpeedDrops && !HasStayedSlowLongEnough(Time.deltaTime))
+            {
+                return;
+            }
+
+            if (Time.time >= nextSpawnAttempt)
             {
                 TrySpawnGiant();
+            }
+        }
+
+        /// <summary>
+        /// Optional defeat condition: the giant appears once the carriage has really ridden
+        /// (<see cref="armDistance"/>) and then lost speed for a sustained time. Disabled by default
+        /// so older scenes keep spawning the giant immediately.
+        /// </summary>
+        private bool HasStayedSlowLongEnough(float deltaTime)
+        {
+            if (speedReceiver == null || !IsArmed)
+            {
+                return false;
+            }
+
+            float speed = speedReceiver.EffectiveSpeed;
+            if (speed <= speedThreshold)
+            {
+                slowElapsed += Mathf.Max(0f, deltaTime);
+            }
+            else
+            {
+                slowElapsed = 0f;
+            }
+
+            return slowElapsed >= slowSpeedDuration;
+        }
+
+        /// <summary>
+        /// Armed by distance travelled rather than by raw speed: several monsters hanging on the
+        /// cart cap the maximum speed below any threshold, and that stall is exactly the defeat case.
+        /// </summary>
+        public bool IsArmed
+        {
+            get
+            {
+                if (!spawnWhenSpeedDrops)
+                {
+                    return true;
+                }
+
+                if (cartTransform == null)
+                {
+                    return false;
+                }
+
+                if (!startCaptured)
+                {
+                    startPosition = cartTransform.position;
+                    startCaptured = true;
+                }
+
+                return (cartTransform.position - startPosition).sqrMagnitude >= armDistance * armDistance;
             }
         }
 
@@ -91,6 +182,25 @@ namespace JapaneseDemonHunter.Monsters
             cartRearReachPoint = configuredRearPoint;
             initialDistance = Mathf.Max(1f, configuredInitialDistance);
             groundMask = configuredGroundMask;
+        }
+
+        /// <summary>Wires the optional "appears when the carriage slows down" defeat trigger.</summary>
+        public void ConfigureSpeedTrigger(
+            bool enabled, float threshold, float duration, MonoBehaviour source, float armingDistance = 30f)
+        {
+            spawnWhenSpeedDrops = enabled;
+            speedThreshold = Mathf.Max(0f, threshold);
+            slowSpeedDuration = Mathf.Max(0f, duration);
+            armDistance = Mathf.Max(0f, armingDistance);
+            speedSource = source;
+            speedReceiver = source as ICartSpeedPenaltyReceiver;
+            slowElapsed = 0f;
+            startCaptured = false;
+            if (cartTransform != null)
+            {
+                startPosition = cartTransform.position;
+                startCaptured = true;
+            }
         }
 
         private bool TryFindSpawnGround(Vector3 center, out Vector3 point)

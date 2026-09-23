@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(git:*)",
+      "Shell(git check-ignore -v .commandcode/taste/taste.md AGENTS.md .agents 2>&1; echo \"---\"; ls -la .commandcode .agents 2>&1 | head -40)",
+      "Shell(dir:*)",
+      "Shell(if:*)",
+      "Shell(else:*)",
+      "Shell(move:*)",
+      "Shell(del:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

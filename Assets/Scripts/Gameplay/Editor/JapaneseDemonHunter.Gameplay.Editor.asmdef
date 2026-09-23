@@ -1,0 +1,25 @@
+{
+  "name": "JapaneseDemonHunter.Gameplay.Editor",
+  "rootNamespace": "JapaneseDemonHunter.GameplayEditor",
+  "references": [
+    "JapaneseDemonHunter.Gameplay",
+    "JapaneseDemonHunter.Monsters",
+    "JapaneseDemonHunter.Prototype",
+    "Reins",
+    "Oculus.Interaction",
+    "Oculus.Interaction.OVR.Editor",
+    "UnityEngine.UI",
+    "Unity.RenderPipelines.Core.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

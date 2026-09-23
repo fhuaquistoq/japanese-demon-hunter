@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/MonstersPrototype.unity
     guid: e6872e255f1325245868023a8384c0b9
+  - enabled: 1
+    path: Assets/Scenes/JapanDemonHunter.unity
+    guid: 0370b37075aff5343b99c8847cde15b7
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

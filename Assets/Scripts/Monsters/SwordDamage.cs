@@ -125,6 +125,17 @@ namespace JapaneseDemonHunter.Monsters
         }
 
         /// <summary>
+        /// Tunes the velocity-activated window. Fists and any swingable prop use this so a hit only
+        /// counts when the tip really accelerates relative to the moving reference.
+        /// </summary>
+        public void ConfigureSwingWindows(bool enabled, float swingSpeed, float grace)
+        {
+            allowVelocityActivatedWindows = enabled;
+            minimumSwingSpeed = Mathf.Max(0.1f, swingSpeed);
+            velocityWindowGrace = Mathf.Max(0.02f, grace);
+        }
+
+        /// <summary>
         /// The reference whose motion must be ignored when measuring swing speed. A sword carried by
         /// a moving cart would otherwise always look like it is being swung.
         /// </summary>

@@ -16,6 +16,11 @@ namespace JapaneseDemonHunter.Monsters
         [Min(0f)] public float minimumFlyingHeight;
         [Min(0f)] public float maximumFlyingHeight;
         [Min(0f)] public float attachmentLoad;
+
+        [Header("Comportamiento opcional")]
+        [Tooltip("When enabled the spawner overrides the prefab's own target strategy, so the same monster prefab can hunt the player in one scene and candles in another.")]
+        public bool overrideTargetStrategy;
+        public MonsterTargetStrategy targetStrategy = MonsterTargetStrategy.PrioritizeHunter;
     }
 
     [DisallowMultipleComponent]
@@ -33,6 +38,8 @@ namespace JapaneseDemonHunter.Monsters
         [Header("Spawn timing")]
         [SerializeField] private bool spawnOneOfEachOnStart = true;
         [SerializeField, Min(0.1f)] private float spawnInterval = 5f;
+        [Tooltip("Seconds before the first spawn when the scene must start empty.")]
+        [SerializeField, Min(0f)] private float initialSpawnDelay = 20f;
         [SerializeField, Min(1)] private int maximumActiveMonsters = 8;
         [SerializeField, Min(1)] private int maximumPlacementAttempts = 12;
 
@@ -54,6 +61,9 @@ namespace JapaneseDemonHunter.Monsters
 
         public int ActiveMonsterCount => activeMonsters.Count;
         public int MaximumActiveMonsters => maximumActiveMonsters;
+        public bool SpawnsOneOfEachOnStart => spawnOneOfEachOnStart;
+        public float InitialSpawnDelay => initialSpawnDelay;
+        public float SpawnInterval => spawnInterval;
         public int AttachedMonsterCount => activeMonsters.Count(monster =>
             monster != null && monster.Attachment != null && monster.Attachment.IsAttached);
         public IReadOnlyCollection<MonsterBase> ActiveMonsters => activeMonsters;
@@ -77,7 +87,7 @@ namespace JapaneseDemonHunter.Monsters
                 }
             }
 
-            nextSpawnTime = Time.time + spawnInterval;
+            nextSpawnTime = Time.time + (spawnOneOfEachOnStart ? spawnInterval : initialSpawnDelay);
         }
 
         private void Update()
@@ -122,6 +132,15 @@ namespace JapaneseDemonHunter.Monsters
             monster.name = entry.prefab.name;
             monster.BecameInactive += HandleMonsterInactive;
             activeMonsters.Add(monster);
+            if (entry.overrideTargetStrategy)
+            {
+                MonsterTargetSelector selector = monster.GetComponent<MonsterTargetSelector>();
+                if (selector != null)
+                {
+                    selector.Strategy = entry.targetStrategy;
+                }
+            }
+
             MonsterAttachment spawnedAttachment = monster.GetComponent<MonsterAttachment>();
             if (spawnedAttachment != null && entry.attachmentLoad > 0f)
             {
@@ -270,6 +289,17 @@ namespace JapaneseDemonHunter.Monsters
             attachmentPoints = configuredAttachmentPoints;
             cartLoad = configuredCartLoad;
             hunterTarget = configuredHunterTarget;
+        }
+
+        /// <summary>
+        /// Controls when monsters start appearing: a scene can begin empty and let the tension build
+        /// before the first spawn.
+        /// </summary>
+        public void ConfigureTiming(bool configuredSpawnOneOfEachOnStart, float configuredInitialDelay, float configuredInterval)
+        {
+            spawnOneOfEachOnStart = configuredSpawnOneOfEachOnStart;
+            initialSpawnDelay = Mathf.Max(0f, configuredInitialDelay);
+            spawnInterval = Mathf.Max(0.1f, configuredInterval);
         }
 
         private MonsterSpawnEntry SelectWeightedEntry()

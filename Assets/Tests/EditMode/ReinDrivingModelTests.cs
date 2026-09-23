@@ -29,8 +29,19 @@ namespace Reins.Tests
         }
 
         [Test]
-        public void SelectedHandleDoesNotReturnToRestUntilEveryInteractorReleasesIt()
+        public void EitherHandMayPullAnyPartOfTheRopeWhenStrictOwnershipIsOff()
         {
+            Assert.IsTrue(ReinHandOwnership.CanDriveWithEitherHand(true, true, true));
+            Assert.IsFalse(ReinHandOwnership.CanDriveWithEitherHand(false, true, true),
+                "A rope nobody is holding cannot drive.");
+            Assert.IsFalse(ReinHandOwnership.CanDriveWithEitherHand(true, false, true),
+                "A disconnected hand cannot drive.");
+            Assert.IsFalse(ReinHandOwnership.CanDriveWithEitherHand(true, true, false),
+                "Invalid tracking data cannot drive.");
+        }
+
+        [Test]
+        public void SelectedHandleDoesNotReturnToRestUntilEveryInteractorReleasesIt()        {
             Assert.IsFalse(ReinHandOwnership.ShouldReturnToRest(true));
             Assert.IsTrue(ReinHandOwnership.ShouldReturnToRest(false));
             Assert.IsFalse(ReinHandOwnership.CanDrive(
@@ -90,6 +101,43 @@ namespace Reins.Tests
 
             Assert.AreEqual(ReinGestureKind.None,
                 machine.Step(true, new Vector3(0f, 0.1f, 0f), 0.5f).Kind);
+        }
+
+        [Test]
+        public void LiftingHoldingAndThenYankingDownStillAccelerates()
+        {
+            var machine = new ReinGestureStateMachine();
+
+            // Raise the rope and keep the hand up far longer than one lash takes.
+            machine.Step(true, new Vector3(0f, 0.15f, 0f), 0.016f);
+            machine.Step(true, new Vector3(0f, 0.3f, 0f), 1.5f);
+
+            Assert.AreEqual(ReinGestureKind.Accelerate,
+                machine.Step(true, new Vector3(0f, 0.05f, 0f), 0.1f).Kind);
+        }
+
+        [Test]
+        public void PullingTheRopeBackwardsBrakes()
+        {
+            var machine = new ReinGestureStateMachine();
+
+            Assert.AreEqual(ReinGestureKind.Brake,
+                machine.Step(true, new Vector3(0f, 0f, 0.2f), 0.016f).Kind);
+        }
+
+        [Test]
+        public void DroppingTheRopeBackDownRearmsTheNextLash()
+        {
+            var machine = new ReinGestureStateMachine();
+            machine.Step(true, new Vector3(0f, 0.2f, 0f), 0.016f);
+            Assert.AreEqual(ReinGestureKind.Accelerate,
+                machine.Step(true, Vector3.zero, 0.016f).Kind);
+
+            // The rope is let go and falls back to its resting height; that must re-arm the whip.
+            machine.Step(true, Vector3.zero, 0.5f);
+            machine.Step(true, new Vector3(0f, 0.2f, 0f), 0.5f);
+            Assert.AreEqual(ReinGestureKind.Accelerate,
+                machine.Step(true, Vector3.zero, 0.05f).Kind);
         }
 
         [TestCase(0, -1, -1)]

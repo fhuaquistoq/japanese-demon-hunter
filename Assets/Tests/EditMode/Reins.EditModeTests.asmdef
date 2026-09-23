@@ -3,7 +3,8 @@
   "rootNamespace": "Reins.Tests",
   "references": [
     "Reins",
-    "Oculus.Interaction"
+    "Oculus.Interaction",
+    "JapaneseDemonHunter.Prototype"
   ],
   "includePlatforms": [
     "Editor"

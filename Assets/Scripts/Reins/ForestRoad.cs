@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Reins
 {
-    /// <summary>Builds a bounded world-space forest road pool that recycles toward negative Z.</summary>
+    /// <summary>Builds a bounded world-space forest road pool that recycles along a curved path.</summary>
     [ExecuteAlways]
     public sealed class ForestRoad : MonoBehaviour
     {
@@ -11,27 +11,57 @@ namespace Reins
         [SerializeField, Min(6f)] private float roadWidth = 9.6f;
         [SerializeField, Min(0.1f)] private float laneWidth = 2.8f;
         [SerializeField] private Transform vehicleRoot;
+        [SerializeField, Min(0.1f)] private float stoneLaneWidth = 1.15f;
+        [SerializeField, Min(0.1f)] private float stoneDepth = 0.65f;
+
+        [Header("Curvas")]
+        [SerializeField, Range(0f, 2f)] private float curvatureScale = 1f;
+        [SerializeField, Min(10f)] private float turnRadius = RoadPathModel.DefaultTurnRadius;
+
+        [Header("Modelos reales (opcional)")]
+        [SerializeField] private GameObject[] treePrefabs;
+        [SerializeField] private GameObject rockPrefab;
+        [SerializeField, Min(1f)] private float treeHeight = 7f;
+        [SerializeField, Min(0.05f)] private float rockFootprintPadding = 1f;
+
+        [Header("Final del camino (opcional)")]
+        [SerializeField, Min(0)] private int totalTiles;
+        [SerializeField] private GameObject kingdomPrefab;
 
         private const int TreesPerSide = 3;
+        private const int RecycleBehindChunks = 2;
+        private const int MaximumChunks = 4096;
+
         private Tile[] _tiles;
+        private RoadPathModel _path;
         private Material _roadMaterial;
         private Material _vergeMaterial;
         private Material _dividerMaterial;
         private Material _trunkMaterial;
         private Material _leafMaterial;
-        [SerializeField, Min(0.1f)] private float stoneLaneWidth = 1.15f;
-        [SerializeField, Min(0.1f)] private float stoneDepth = 0.65f;
+        private Material _stoneMaterial;
 
         private bool _initialized;
-        private int _nextObstacleGroup;
-        private Material _stoneMaterial;
+        private int _nextChunkIndex;
+        private int _cartChunkIndex;
+        private GameObject _kingdom;
+
+        public float TraveledDistance { get; private set; }
+        public float LevelDistance => totalTiles > 0 ? totalTiles * tileLength : 0f;
+        public bool HasReachedEnd => LevelDistance > 0f && TraveledDistance >= LevelDistance;
+        public int CurrentChunkIndex => _cartChunkIndex;
+        public int TotalTiles => totalTiles;
+        public bool HasKingdom => _kingdom != null;
 
         private sealed class Tile
         {
             public Transform root;
+            public int chunkIndex;
             public readonly Transform[] stones = new Transform[3];
             public readonly bool[] consumed = new bool[3];
             public int blockedMask;
+
+            public bool IsBuilt => root != null && root.gameObject.activeSelf;
         }
 
         private void OnEnable()
@@ -71,29 +101,20 @@ namespace Reins
                 return;
             }
 
-            var vehicleZ = vehicleRoot.position.z;
+            int nearest = FindNearestTile(vehicleRoot.position, out var localPosition);
+            if (nearest >= 0)
+            {
+                _cartChunkIndex = _tiles[nearest].chunkIndex;
+                float advance = Mathf.Max(0f, -localPosition.z);
+                TraveledDistance = _cartChunkIndex * tileLength + advance;
+            }
+
             for (var i = 0; i < _tiles.Length; i++)
             {
-                var tile = _tiles[i].root;
-                if (tile.position.z - vehicleZ <= tileLength * 0.5f)
+                if (_tiles[i].IsBuilt && _tiles[i].chunkIndex < _cartChunkIndex - RecycleBehindChunks)
                 {
-                    continue;
+                    RecycleTile(_tiles[i]);
                 }
-
-                var frontZ = float.PositiveInfinity;
-                for (var j = 0; j < _tiles.Length; j++)
-                {
-                    if (_tiles[j].root.position.z < frontZ)
-                    {
-                        frontZ = _tiles[j].root.position.z;
-                    }
-                }
-
-                var position = tile.position;
-                position.z = frontZ - tileLength;
-                tile.position = position;
-                var recycled = _tiles[i];
-                ConfigureObstacleGroup(recycled, _nextObstacleGroup++);
             }
         }
 
@@ -115,6 +136,12 @@ namespace Reins
                 }
 
                 _tiles = null;
+            }
+
+            if (_kingdom != null)
+            {
+                Destroy(_kingdom);
+                _kingdom = null;
             }
 
             DestroyMaterial(_roadMaterial);
@@ -148,40 +175,102 @@ namespace Reins
                 }
             }
 
+            int poolSize = Mathf.Clamp(tileCount, 6, 10);
+            _path = CreatePathModel();
+
             _roadMaterial = CreateMaterial(new Color(0.20f, 0.22f, 0.20f));
             _vergeMaterial = CreateMaterial(new Color(0.16f, 0.34f, 0.12f));
             _dividerMaterial = CreateMaterial(new Color(0.86f, 0.79f, 0.53f));
             _trunkMaterial = CreateMaterial(new Color(0.28f, 0.16f, 0.08f));
             _leafMaterial = CreateMaterial(new Color(0.10f, 0.30f, 0.12f));
             _stoneMaterial = CreateMaterial(new Color(0.34f, 0.32f, 0.29f));
-            _tiles = new Tile[Mathf.Clamp(tileCount, 6, 10)];
 
-            for (var i = 0; i < _tiles.Length; i++)
+            _tiles = new Tile[poolSize];
+            for (var i = 0; i < poolSize; i++)
             {
                 var tileRoot = new GameObject("RoadTile_" + i).transform;
                 tileRoot.SetParent(transform, false);
-                tileRoot.localPosition = new Vector3(0f, 0f, -i * tileLength);
-                _tiles[i] = new Tile { root = tileRoot };
-                BuildTile(tileRoot, i);
-                BuildStones(_tiles[i], i);
+                var tile = new Tile { root = tileRoot, chunkIndex = i };
+                _tiles[i] = tile;
+
+                if (totalTiles > 0 && i >= totalTiles)
+                {
+                    // The road ends before the pool is exhausted: keep the spare tiles parked.
+                    tile.chunkIndex = int.MaxValue;
+                    tileRoot.gameObject.SetActive(false);
+                    continue;
+                }
+
+                PlaceTile(tile, i);
             }
 
-            _nextObstacleGroup = _tiles.Length;
+            _nextChunkIndex = poolSize;
+            _cartChunkIndex = 0;
+            BuildKingdom();
             _initialized = true;
         }
 
-        private void BuildTile(Transform tile, int index)
+        private void BuildKingdom()
         {
-            CreatePart(tile, "Road", PrimitiveType.Cube,
+            if (kingdomPrefab == null || totalTiles <= 0)
+            {
+                return;
+            }
+
+            _path.GetChunkPose(totalTiles, out var position, out var headingDegrees);
+            _kingdom = Instantiate(
+                kingdomPrefab,
+                position,
+                Quaternion.Euler(0f, headingDegrees + 180f, 0f),
+                transform);
+            _kingdom.name = "Kingdom";
+        }
+
+        private void RecycleTile(Tile tile)
+        {
+            if (_nextChunkIndex >= _path.ChunkCount || (totalTiles > 0 && _nextChunkIndex >= totalTiles))
+            {
+                return;
+            }
+
+            tile.chunkIndex = _nextChunkIndex;
+            _nextChunkIndex++;
+            if (!tile.root.gameObject.activeSelf)
+            {
+                tile.root.gameObject.SetActive(true);
+            }
+
+            PlaceTile(tile, tile.chunkIndex);
+        }
+
+        private void PlaceTile(Tile tile, int chunkIndex)
+        {
+            _path.GetChunkPose(chunkIndex, out var position, out var headingDegrees);
+            tile.root.position = position;
+            tile.root.rotation = Quaternion.Euler(0f, headingDegrees, 0f);
+            tile.root.localScale = Vector3.one;
+
+            if (tile.stones[0] == null)
+            {
+                BuildTileContent(tile, chunkIndex);
+            }
+
+            ConfigureObstacleGroup(tile, chunkIndex);
+        }
+
+        private void BuildTileContent(Tile tile, int index)
+        {
+            Transform tileRoot = tile.root;
+            CreatePart(tileRoot, "Road", PrimitiveType.Cube,
                 new Vector3(0f, -0.06f, 0f), new Vector3(roadWidth, 0.12f, tileLength), _roadMaterial);
-            CreatePart(tile, "GreenVerge_Left", PrimitiveType.Cube,
+            CreatePart(tileRoot, "GreenVerge_Left", PrimitiveType.Cube,
                 new Vector3(-roadWidth * 0.5f - 0.65f, -0.03f, 0f), new Vector3(1.3f, 0.08f, tileLength), _vergeMaterial);
-            CreatePart(tile, "GreenVerge_Right", PrimitiveType.Cube,
+            CreatePart(tileRoot, "GreenVerge_Right", PrimitiveType.Cube,
                 new Vector3(roadWidth * 0.5f + 0.65f, -0.03f, 0f), new Vector3(1.3f, 0.08f, tileLength), _vergeMaterial);
 
             for (var divider = -1; divider <= 1; divider += 2)
             {
-                CreatePart(tile, "LaneDivider_" + divider, PrimitiveType.Cube,
+                CreatePart(tileRoot, "LaneDivider_" + divider, PrimitiveType.Cube,
                     new Vector3(divider * laneWidth * 0.5f, 0.012f, 0f), new Vector3(0.075f, 0.025f, tileLength - 0.2f), _dividerMaterial);
             }
 
@@ -194,8 +283,14 @@ namespace Reins
                     var x = side * (roadWidth * 0.5f + 2f + variation);
                     var height = 2.8f + ((index * 7 + tree * 3 + side + 12) % 4) * 0.35f;
                     var treeRoot = new GameObject("Tree_" + side + "_" + tree).transform;
-                    treeRoot.SetParent(tile, false);
+                    treeRoot.SetParent(tileRoot, false);
                     treeRoot.localPosition = new Vector3(x, 0f, z);
+
+                    if (TryCreateTreeVisual(treeRoot, index * 31 + tree * 7 + side))
+                    {
+                        continue;
+                    }
+
                     CreatePart(treeRoot, "Trunk", PrimitiveType.Cylinder,
                         new Vector3(0f, height * 0.25f, 0f), new Vector3(0.22f, height * 0.25f, 0.22f), _trunkMaterial);
                     CreatePart(treeRoot, "Canopy", PrimitiveType.Sphere,
@@ -204,21 +299,64 @@ namespace Reins
                         new Vector3(0f, height * 0.92f, 0f), new Vector3(0.8f, 0.8f, 0.8f), _leafMaterial);
                 }
             }
+
+            BuildStones(tile, index);
+        }
+
+        private bool TryCreateTreeVisual(Transform parent, int variationSeed)
+        {
+            if (treePrefabs == null || treePrefabs.Length == 0)
+            {
+                return false;
+            }
+
+            var prefab = treePrefabs[Mathf.Abs(variationSeed) % treePrefabs.Length];
+            if (prefab == null)
+            {
+                return false;
+            }
+
+            var instance = Instantiate(prefab, parent, false);
+            instance.name = "TreeModel";
+            float height = treeHeight * (0.85f + (Mathf.Abs(variationSeed) % 5) * 0.06f);
+            FitUniformHeight(instance, height);
+            return true;
         }
 
         private void BuildStones(Tile tile, int index)
         {
             for (var lane = -1; lane <= 1; lane++)
             {
-                var stone = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                stone.name = "Stone_Lane_" + lane;
-                stone.transform.SetParent(tile.root, false);
+                GameObject stone;
+                if (rockPrefab != null)
+                {
+                    stone = Instantiate(rockPrefab);
+                    stone.name = "Stone_Lane_" + lane;
+                    stone.transform.SetParent(tile.root, false);
+                    FitHorizontalFootprint(
+                        stone,
+                        stoneLaneWidth * 2f * rockFootprintPadding,
+                        stoneDepth * 2f * rockFootprintPadding);
+                }
+                else
+                {
+                    stone = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    stone.name = "Stone_Lane_" + lane;
+                    stone.transform.SetParent(tile.root, false);
+                    stone.transform.localScale = new Vector3(0.82f, 0.55f, 0.92f);
+                    var renderer = stone.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        renderer.sharedMaterial = _stoneMaterial;
+                    }
+                }
+
                 stone.transform.localPosition = new Vector3(lane * laneWidth, 0.34f, -tileLength * 0.25f);
-                stone.transform.localScale = new Vector3(0.82f, 0.55f, 0.92f);
-                var collider = stone.GetComponent<Collider>();
-                if (collider != null) Destroy(collider);
-                var renderer = stone.GetComponent<Renderer>();
-                if (renderer != null) renderer.sharedMaterial = _stoneMaterial;
+                foreach (var collider in stone.GetComponentsInChildren<Collider>())
+                {
+                    Destroy(collider);
+                }
+
                 tile.stones[lane + 1] = stone.transform;
             }
 
@@ -238,19 +376,95 @@ namespace Reins
             }
         }
 
+        /// <summary>
+        /// Nearest built tile to the point. It also returns the point in that tile's local space,
+        /// which yields a continuous distance along the road (even past the last tile).
+        /// </summary>
+        private int FindNearestTile(Vector3 worldPosition, out Vector3 localPosition)
+        {
+            localPosition = default;
+            if (_tiles == null)
+            {
+                return -1;
+            }
+
+            var bestIndex = -1;
+            var bestScore = float.MaxValue;
+            for (var i = 0; i < _tiles.Length; i++)
+            {
+                if (!_tiles[i].IsBuilt)
+                {
+                    continue;
+                }
+
+                var local = _tiles[i].root.InverseTransformPoint(worldPosition);
+                if (Mathf.Abs(local.x) <= roadWidth * 0.5f + 2f && local.z <= 0f && local.z >= -tileLength)
+                {
+                    localPosition = local;
+                    return i;
+                }
+
+                var clampedX = Mathf.Max(0f, Mathf.Abs(local.x) - roadWidth * 0.5f);
+                var clampedZ = local.z > 0f
+                    ? local.z
+                    : (local.z < -tileLength ? -tileLength - local.z : 0f);
+                var score = clampedX * clampedX + clampedZ * clampedZ;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestIndex = i;
+                    localPosition = local;
+                }
+            }
+
+            return bestIndex;
+        }
+
+        /// <summary>Forward direction of the road at the given position, used to ride around curves.</summary>
+        public bool TryGetRoadFrame(Vector3 worldPosition, out Vector3 forward)
+        {
+            forward = Vector3.forward;
+            int index = FindNearestTile(worldPosition, out _);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            forward = _tiles[index].root.forward;
+            return true;
+        }
+
+        /// <summary>Builds the same path used at runtime so tests and tooling can reason about it.</summary>
+        public RoadPathModel CreatePathModel()
+        {
+            int poolSize = Mathf.Clamp(tileCount, 6, 10);
+            int chunks = totalTiles > 0
+                ? Mathf.Clamp(totalTiles + 1, poolSize + 1, MaximumChunks)
+                : MaximumChunks;
+            return new RoadPathModel(chunks, tileLength, curvatureScale, turnRadius);
+        }
+
         public bool TryStopOnRock(Vector3 previousPosition, Vector3 currentPosition)
         {
             if (_tiles == null) return false;
             for (var i = 0; i < _tiles.Length; i++)
             {
                 var tile = _tiles[i];
+                if (!tile.IsBuilt)
+                {
+                    continue;
+                }
+
+                var localPrevious = tile.root.InverseTransformPoint(previousPosition);
+                var localCurrent = tile.root.InverseTransformPoint(currentPosition);
                 for (var laneIndex = 0; laneIndex < 3; laneIndex++)
                 {
                     if ((tile.blockedMask & (1 << laneIndex)) == 0) continue;
                     var stone = tile.stones[laneIndex];
                     if (stone == null || !stone.gameObject.activeSelf) continue;
-                    if (ObstacleCollisionModel.TrySweep(previousPosition.z, currentPosition.z,
-                        previousPosition.x, currentPosition.x, stone.position.z, stone.position.x,
+                    var localStone = tile.root.InverseTransformPoint(stone.position);
+                    if (ObstacleCollisionModel.TrySweep(localPrevious.z, localCurrent.z,
+                        localPrevious.x, localCurrent.x, localStone.z, localStone.x,
                         stoneDepth, stoneLaneWidth, ref tile.consumed[laneIndex]))
                     {
                         return true;
@@ -264,6 +478,68 @@ namespace Reins
         public static int GetObstacleBlockedLaneMask(int groupIndex)
         {
             return ObstacleSchedule.BlockedLaneMask(groupIndex);
+        }
+
+        private static void FitUniformHeight(GameObject instance, float targetHeight)
+        {
+            if (!TryGetRendererBounds(instance, out var bounds) || bounds.size.y <= 0.0001f)
+            {
+                return;
+            }
+
+            instance.transform.localScale *= targetHeight / bounds.size.y;
+        }
+
+        private static void FitHorizontalFootprint(GameObject instance, float targetWidth, float targetDepth)
+        {
+            if (!TryGetRendererBounds(instance, out var bounds))
+            {
+                return;
+            }
+
+            var scale = instance.transform.localScale;
+            if (bounds.size.x > 0.0001f)
+            {
+                scale.x *= targetWidth / bounds.size.x;
+            }
+
+            if (bounds.size.z > 0.0001f)
+            {
+                scale.z *= targetDepth / bounds.size.z;
+            }
+
+            if (bounds.size.y > 0.0001f)
+            {
+                scale.y *= Mathf.Max(scale.x, scale.z);
+            }
+
+            instance.transform.localScale = scale;
+        }
+
+        private static bool TryGetRendererBounds(GameObject instance, out Bounds bounds)
+        {
+            var renderers = instance.GetComponentsInChildren<Renderer>();
+            bounds = default;
+            var hasBounds = false;
+            foreach (var renderer in renderers)
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                if (!hasBounds)
+                {
+                    bounds = renderer.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            return hasBounds;
         }
 
         private static void CreatePart(Transform parent, string name, PrimitiveType primitive,
@@ -310,37 +586,47 @@ namespace Reins
         private void OnDrawGizmos()
         {
             var count = Mathf.Clamp(tileCount, 6, 10);
+            var model = CreatePathModel();
             var width = Mathf.Max(roadWidth, laneWidth * 3f);
+            var rootRotation = transform.rotation;
+            var rootPosition = transform.position;
             for (var i = 0; i < count; i++)
             {
-                var center = transform.position + new Vector3(0f, -0.06f, -i * tileLength - tileLength * 0.5f);
+                if (totalTiles > 0 && i >= totalTiles)
+                {
+                    break;
+                }
+
+                model.GetChunkPose(i, out var localPosition, out var headingDegrees);
+                var rotation = rootRotation * Quaternion.Euler(0f, headingDegrees, 0f);
+                var center = rootPosition + rootRotation * (localPosition + rotation * new Vector3(0f, -0.06f, -tileLength * 0.5f));
+
                 Gizmos.color = new Color(0.24f, 0.25f, 0.22f, 0.85f);
-                Gizmos.DrawCube(center, new Vector3(width, 0.08f, tileLength));
+                Gizmos.matrix = Matrix4x4.TRS(center, rotation, Vector3.one);
+                Gizmos.DrawCube(Vector3.zero, new Vector3(width, 0.08f, tileLength));
 
                 Gizmos.color = new Color(0.92f, 0.82f, 0.50f, 1f);
                 for (var divider = -1; divider <= 1; divider += 2)
                 {
-                    var x = transform.position.x + divider * laneWidth * 0.5f;
-                    Gizmos.DrawCube(new Vector3(x, transform.position.y + 0.02f, center.z),
+                    Gizmos.DrawCube(new Vector3(divider * laneWidth * 0.5f, 0.02f, 0f),
                         new Vector3(0.09f, 0.025f, tileLength - 0.2f));
                 }
 
                 Gizmos.color = new Color(0.16f, 0.38f, 0.13f, 0.8f);
-                Gizmos.DrawCube(center + Vector3.left * (width * 0.5f + 0.65f), new Vector3(1.3f, 0.06f, tileLength));
-                Gizmos.DrawCube(center + Vector3.right * (width * 0.5f + 0.65f), new Vector3(1.3f, 0.06f, tileLength));
+                Gizmos.DrawCube(new Vector3(-(width * 0.5f + 0.65f), 0f, 0f), new Vector3(1.3f, 0.06f, tileLength));
+                Gizmos.DrawCube(new Vector3(width * 0.5f + 0.65f, 0f, 0f), new Vector3(1.3f, 0.06f, tileLength));
 
-                for (var tree = 0; tree < TreesPerSide; tree++)
-                {
-                    var z = transform.position.z - i * tileLength - tileLength * 0.5f + (tree + 0.5f) * tileLength / TreesPerSide;
-                    for (var side = -1; side <= 1; side += 2)
-                    {
-                        var x = transform.position.x + side * (width * 0.5f + 2.5f);
-                        Gizmos.color = new Color(0.32f, 0.19f, 0.09f, 1f);
-                        Gizmos.DrawCube(new Vector3(x, transform.position.y + 0.55f, z), new Vector3(0.28f, 1.1f, 0.28f));
-                        Gizmos.color = new Color(0.10f, 0.34f, 0.13f, 1f);
-                        Gizmos.DrawSphere(new Vector3(x, transform.position.y + 2.15f, z), 0.9f);
-                    }
-                }
+                Gizmos.matrix = Matrix4x4.identity;
+            }
+
+            if (totalTiles > 0)
+            {
+                model.GetChunkPose(totalTiles, out var endPosition, out var endHeading);
+                var endCenter = rootPosition + rootRotation * endPosition;
+                Gizmos.color = new Color(0.95f, 0.55f, 0.15f, 1f);
+                Gizmos.DrawWireSphere(endCenter, 3f);
+                Gizmos.DrawLine(endCenter,
+                    endCenter + rootRotation * Quaternion.Euler(0f, endHeading, 0f) * Vector3.back * 8f);
             }
         }
     }

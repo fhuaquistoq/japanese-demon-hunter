@@ -18,6 +18,9 @@ namespace JapaneseDemonHunter.Monsters
 
         public float TotalLoad => registrations.Values.Sum();
         public int RegisteredMonsterCount => registrations.Count;
+
+        /// <summary>True when a speed penalty receiver is wired, even before Awake resolves the cache.</summary>
+        public bool HasReceiver => receiver != null || speedPenaltyReceiver is ICartSpeedPenaltyReceiver;
         public float ReferenceMaximumLoad => referenceMaximumLoad;
         public float MinimumSpeedMultiplier => minimumSpeedMultiplier;
         public float SpeedMultiplier => Mathf.Clamp(

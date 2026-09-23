@@ -7,7 +7,7 @@
 - Delivers work in strictly-scoped phases and expects the assistant to complete only the requested phase without advancing to later phases. Confidence: 0.85
 - If a real environment (e.g., Unity Editor) is available, wants the assistant to actually execute the work there and save results, rather than merely preparing instructions; if unavailable, expects concrete manual-verification steps. Confidence: 0.8
 - Wants direct implementation (real code, files, assets) rather than explanations, pseudocode, or "how to" descriptions. Confidence: 0.85
-- Prefers using real project assets (e.g., imported 3D models) over placeholder primitives, using geometric stand-ins only as temporary fallbacks. Confidence: 0.75
+- Prefers using real project assets — imported 3D models and user-provided audio/animations — over placeholder primitives, using geometric stand-ins only as temporary fallbacks. Confidence: 0.8
 - Expects a structured completion report at the end: files created/modified, how to run/generate, tests actually executed, integration points, and known limitations; when blocked, expects a clear stopping point with evidence obtained, confirmed cause or open hypothesis, tests run and their results, files modified, changes reverted, current project state, and exact steps to continue. Confidence: 0.85
 - Demands honest verification reporting: never claim a test or check passed unless it was actually executed, and clearly state what must still be verified manually. Confidence: 0.85
 - Wants conclusions backed by evidence: separate the last log line from the root cause, do not blame a component merely because it appears in a log, and do not assume code is correct just because a previous compile succeeded. Confidence: 0.9
@@ -20,3 +20,11 @@
 - Requires Editor tooling to be idempotent and non-destructive: it must not duplicate components or overwrite the user's manual scene/Inspector modifications, and must be safely re-runnable. Confidence: 0.7
 - For VR work, insists the camera/XR Origin never be moved or pushed artificially, and that the player never be subjected to sudden forced displacements. Confidence: 0.7
 - Does not want exact asset or animation names assumed; expects the actually imported models and their available clips to be inspected and the implementation adapted to what really exists. Confidence: 0.7
+- For performance-sensitive (especially VR) scenes, prefers keeping the number of distinct 3D models low and replicating/instancing a few base models instead of using many unique assets (e.g., "use only 2 distinct monster models and multiply from there"). Confidence: 0.75
+- Wants user-facing diagnostics wired into the feature itself (e.g., a sound played every time a gesture is detected) so a failure can be attributed to "input not recognized" versus "input recognized but output not applied". Confidence: 0.75
+- Prefers interactive input detection to be forgiving of natural human motion — generous thresholds, longer timing windows and easy re-arming — rather than tight, technical windows. Confidence: 0.65
+- Prefers physically natural behaviour for held/released objects: a released object should drop and stay where it was let go instead of snapping back to a fixed rest position. Confidence: 0.65
+- Expects animations and visual state to follow the actual runtime state (idle when stationary, gallop when moving, with frequency scaled to real speed) rather than being static. Confidence: 0.65
+- Wants a calm opening that builds tension: no enemies at the very start, with the first spawn only after a delay. Confidence: 0.6
+- Wants the game built on realistic physics: dropped objects fall under gravity, and thrown objects fly with real momentum and keep dealing damage in flight. Confidence: 0.8
+- Wants interaction objects to be grabbable from any point along them, without designated handles/grips (e.g., take the rope anywhere along its length). Confidence: 0.7

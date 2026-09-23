@@ -36,8 +36,11 @@ MonoBehaviour:
     rid: 7257495216864886877
   m_ActivePlatformGuid: 
   m_AdditionalPlatformBuildSettings: []
-  m_OverrideGlobalSceneList: 0
-  m_Scenes: []
+  m_OverrideGlobalSceneList: 1
+  m_Scenes:
+  - m_enabled: 1
+    m_path: Assets/Scenes/JapanDemonHunter.unity
+    m_guid: 0370b37075aff5343b99c8847cde15b7
   m_HasScriptingDefines: 0
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
@@ -222,7 +225,7 @@ MonoBehaviour:
     - line: '|     iPhone: 0'
     - line: '|     tvOS: 0'
     - line: '|   overrideDefaultApplicationIdentifier: 1'
-    - line: '|   AndroidBundleVersionCode: 1'
+    - line: '|   AndroidBundleVersionCode: 3'
     - line: '|   AndroidMinSdkVersion: 32'
     - line: '|   AndroidTargetSdkVersion: 34'
     - line: '|   AndroidPreferredInstallLocation: 0'
@@ -924,11 +927,11 @@ MonoBehaviour:
     - line: '|   activeInputHandler: 1'
     - line: '|   windowsGamepadBackendHint: 0'
     - line: '|   enableDirectStorage: 0'
-    - line: '|   cloudProjectId: '
+    - line: '|   cloudProjectId: a6566c46-41b3-4696-a649-36a397ec134e'
     - line: '|   framebufferDepthMemorylessMode: 0'
     - line: '|   qualitySettingsNames: []'
-    - line: '|   projectName: '
-    - line: '|   organizationId: '
+    - line: '|   projectName: japanese-demon-hunter'
+    - line: '|   organizationId: rventurave'
     - line: '|   cloudEnabled: 0'
     - line: '|   legacyClampBlendShapeWeights: 0'
     - line: '|   hmiLoadingImage: {instanceID: 0}'
@@ -969,7 +972,7 @@ MonoBehaviour:
         m_ExportAsGoogleAndroidProject: 1
         m_DebugSymbolLevel: 1
         m_DebugSymbolFormat: 5
-        m_CurrentDeploymentTargetId: __builtin__target_default
+        m_CurrentDeploymentTargetId: 1WMHH831AR1106
         m_BuildType: 2
         m_LinkTimeOptimization: 0
         m_BuildAppBundle: 0
