@@ -31,6 +31,8 @@ namespace Reins
         }
 
         public int ExpectedLaneHand => expectedHand == Handedness.Left ? -1 : 1;
+        public Transform GripTransform => transform;
+        public HandGrabInteractable Interactable => interactable;
 
         public ReinGesture ReadGesture(float deltaTime)
         {
@@ -43,6 +45,17 @@ namespace Reins
 
             var pull = transform.localPosition - restLocalPosition;
             return _gestures.Step(heldByTrackedHand, pull, deltaTime);
+        }
+
+        private void LateUpdate()
+        {
+            if (tether == null || horseHead == null)
+            {
+                return;
+            }
+
+            tether.SetPosition(0, horseHead.position);
+            tether.SetPosition(1, transform.position);
         }
 
         private bool IsSelectedByExpectedTrackedHand(out bool anyInteractorSelected)
@@ -65,17 +78,6 @@ namespace Reins
             }
 
             return false;
-        }
-
-        private void LateUpdate()
-        {
-            if (tether == null || horseHead == null)
-            {
-                return;
-            }
-
-            tether.SetPosition(0, horseHead.position);
-            tether.SetPosition(1, transform.position);
         }
     }
 }

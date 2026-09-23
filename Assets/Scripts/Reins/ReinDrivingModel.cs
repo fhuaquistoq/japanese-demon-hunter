@@ -174,6 +174,101 @@ namespace Reins
         }
     }
 
+    public sealed class LaneTransitionModel
+    {
+        private float _startX;
+        private float _targetX;
+        private float _duration = 1f;
+        private float _elapsed;
+
+        public float CurrentX { get; private set; }
+        public bool IsMoving => _elapsed < _duration;
+
+        public void Begin(float actualX, int targetLane, float laneWidth, float duration)
+        {
+            _startX = actualX;
+            _targetX = targetLane * laneWidth;
+            _duration = Mathf.Max(0.001f, duration);
+            _elapsed = 0f;
+            CurrentX = actualX;
+        }
+
+        public float Step(float deltaTime)
+        {
+            _elapsed = Mathf.Min(_duration, _elapsed + Mathf.Max(0f, deltaTime));
+            var t = _elapsed / _duration;
+            var eased = t * t * (3f - 2f * t);
+            CurrentX = Mathf.LerpUnclamped(_startX, _targetX, eased);
+            return CurrentX;
+        }
+    }
+
+    public static class ObstacleSchedule
+    {
+        // Bit positions correspond to lanes -1, 0, +1. The pattern blocks one or two lanes only.
+        public static int BlockedLaneMask(int groupIndex)
+        {
+            switch (Mathf.Abs(groupIndex % 6))
+            {
+                case 0: return 0b001;
+                case 1: return 0b110;
+                case 2: return 0b010;
+                case 3: return 0b101;
+                case 4: return 0b100;
+                default: return 0b011;
+            }
+        }
+
+        public static bool IsLaneBlocked(int mask, int lane)
+        {
+            return lane >= -1 && lane <= 1 && (mask & (1 << (lane + 1))) != 0;
+        }
+    }
+
+    public sealed class CarriageStopModel
+    {
+        public bool IsStopped { get; private set; }
+
+        public void Stop()
+        {
+            IsStopped = true;
+        }
+
+        public float Accelerate(float speed, float amount, float maximum)
+        {
+            if (IsStopped)
+            {
+                IsStopped = false;
+            }
+
+            return Mathf.Min(maximum, speed + amount);
+        }
+    }
+
+    public static class ObstacleCollisionModel
+    {
+        public static bool TrySweep(float previousZ, float currentZ, float previousX, float currentX,
+            float rockZ, float rockX, float halfDepth, float halfWidth, ref bool consumed)
+        {
+            if (consumed || previousZ < rockZ - halfDepth || currentZ > rockZ + halfDepth || previousZ < currentZ)
+            {
+                return false;
+            }
+
+            var crossingZ = Mathf.Clamp(rockZ, currentZ, previousZ);
+            var denominator = previousZ - currentZ;
+            var t = denominator > 0f ? (previousZ - crossingZ) / denominator : 0f;
+            var crossingX = Mathf.Lerp(previousX, currentX, t);
+            if (Mathf.Abs(crossingX - rockX) > halfWidth)
+            {
+                return false;
+            }
+
+            consumed = true;
+            return true;
+        }
+    }
+
     public static class ThreeLaneModel
     {
         public static bool TryShift(int currentLane, int direction, out int nextLane)

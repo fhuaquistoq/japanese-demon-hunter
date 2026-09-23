@@ -109,5 +109,75 @@ namespace Reins.Tests
             Assert.IsFalse(ThreeLaneModel.TryShift(current, direction, out var next));
             Assert.AreEqual(current, next);
         }
+
+        [Test]
+        public void LaneTransitionIsMonotonicAndReachesExactTarget()
+        {
+            var transition = new LaneTransitionModel();
+            transition.Begin(-0.35f, 1, 2.8f, 0.8f);
+            var previous = transition.CurrentX;
+            for (var i = 0; i < 8; i++)
+            {
+                var current = transition.Step(0.1f);
+                Assert.That(current, Is.GreaterThanOrEqualTo(previous));
+                previous = current;
+            }
+
+            Assert.AreEqual(2.8f, transition.CurrentX, 0.0001f);
+            Assert.IsFalse(transition.IsMoving);
+        }
+
+        [Test]
+        public void MidShiftRequestStartsFromActualInterpolatedPosition()
+        {
+            var transition = new LaneTransitionModel();
+            transition.Begin(-2.8f, 0, 2.8f, 1f);
+            var actualX = transition.Step(0.4f);
+            transition.Begin(actualX, 1, 2.8f, 1f);
+            Assert.AreEqual(actualX, transition.Step(0f));
+            Assert.That(transition.Step(0.5f), Is.GreaterThan(actualX));
+        }
+
+        [TestCase(0b001)]
+        [TestCase(0b110)]
+        [TestCase(0b010)]
+        [TestCase(0b101)]
+        [TestCase(0b100)]
+        [TestCase(0b011)]
+        public void EveryObstaclePatternBlocksOneOrTwoLanesAndLeavesAnOpenLane(int mask)
+        {
+            var blocked = 0;
+            for (var lane = -1; lane <= 1; lane++)
+            {
+                if (ObstacleSchedule.IsLaneBlocked(mask, lane)) blocked++;
+            }
+
+            Assert.That(blocked, Is.InRange(1, 2));
+            Assert.That(3 - blocked, Is.GreaterThanOrEqualTo(1));
+        }
+
+        [Test]
+        public void SweptCollisionUsesInterpolatedXAtRockCrossingAndConsumesOnce()
+        {
+            var consumed = false;
+            Assert.IsFalse(ObstacleCollisionModel.TrySweep(1f, -1f, -2f, 2f,
+                0f, 1.5f, 0.1f, 0.25f, ref consumed), "At the rock's Z crossing the carriage is at x=0.");
+            Assert.IsFalse(consumed);
+            Assert.IsTrue(ObstacleCollisionModel.TrySweep(1f, -1f, 1f, 2f,
+                0f, 1.5f, 0.1f, 0.25f, ref consumed));
+            Assert.IsFalse(ObstacleCollisionModel.TrySweep(-1f, -2f, 2f, 2f,
+                0f, 2f, 0.1f, 0.25f, ref consumed));
+        }
+
+        [Test]
+        public void OneAccelerationClearsStoppedLatchAndAddsSpeed()
+        {
+            var stopped = new CarriageStopModel();
+            stopped.Stop();
+            Assert.IsTrue(stopped.IsStopped);
+            Assert.AreEqual(0.7f, stopped.Accelerate(0f, 0.7f, 3.2f), 0.0001f);
+            Assert.IsFalse(stopped.IsStopped);
+            Assert.AreEqual(1.4f, stopped.Accelerate(0.7f, 0.7f, 3.2f), 0.0001f);
+        }
     }
 }
