@@ -1,0 +1,419 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &2574843029511992527
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8556652044860740936}
+  m_Layer: 0
+  m_Name: Visual
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8556652044860740936
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2574843029511992527}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1020837450296081642}
+  m_Father: {fileID: 6935917936810763379}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2873281564828927468
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4520184205984706852}
+  m_Layer: 0
+  m_Name: AttackPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4520184205984706852
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2873281564828927468}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.15, z: 0.75}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6935917936810763379}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &4617952403120759435
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6935917936810763379}
+  - component: {fileID: 8980187715657815232}
+  - component: {fileID: 1302405481017299695}
+  - component: {fileID: 980400272955927549}
+  - component: {fileID: 2104729113023205145}
+  - component: {fileID: 5711467310144772948}
+  - component: {fileID: 3536239319859887312}
+  - component: {fileID: 1042221603487842477}
+  - component: {fileID: 7289675468490257774}
+  - component: {fileID: 6938067390150551492}
+  m_Layer: 0
+  m_Name: ZombieDemon
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6935917936810763379
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 8556652044860740936}
+  - {fileID: 4520184205984706852}
+  - {fileID: 8908365155304064296}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!136 &8980187715657815232
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.55
+  m_Height: 2.7
+  m_Direction: 1
+  m_Center: {x: 0, y: 1.35, z: 0}
+--- !u!114 &1302405481017299695
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 27720fed0dd40b348b0f3f0af085a6d5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.GroundMonsterMovement
+  patrolSpeed: 1.8
+  chaseSpeed: 6.8
+  approachSpeed: 6.4
+  rotationSharpness: 7
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  obstacleMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  groundProbeHeight: 2.5
+  groundProbeDistance: 6
+  obstacleProbeRadius: 0.4
+  obstacleProbeDistance: 1.2
+  maximumGroundStepHeight: 0.35
+--- !u!114 &980400272955927549
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 66be5d497d562f0409b4187bbff501c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.MonsterTargetSelector
+  strategy: 2
+  minimumSelectionInterval: 1.25
+--- !u!114 &2104729113023205145
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 67ade1f61c43677409376d9e6a1a627c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.MonsterAttack
+  attackOrigin: {fileID: 4520184205984706852}
+  attackRange: 1.75
+  impactDelay: 1.1
+  cooldown: 2.25
+  impactConfirmationRadius: 0.8
+  obstructionMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!114 &5711467310144772948
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad5208d681cbb3845a04eb7905937d95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.MonsterAnimationController
+  animator: {fileID: 4834941122323960788}
+  locomotionState: Locomotion
+  attackState: Attack
+  deathState: Death
+  transitionDuration: 0.15
+--- !u!114 &3536239319859887312
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b6455fd8420c9b47a550d742668cc72, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.MonsterBase
+  movement: {fileID: 1302405481017299695}
+  targetSelector: {fileID: 980400272955927549}
+  attack: {fileID: 2104729113023205145}
+  animationController: {fileID: 5711467310144772948}
+  bodyCollider: {fileID: 8980187715657815232}
+  attachment: {fileID: 0}
+  spawnDuration: 0.25
+  patrolRadius: 8
+  detectionRadius: 45
+  attackDistance: 1.75
+  maximumChaseDistance: 70
+  retreatTimeout: 8
+  deathDisableDelay: 3.166667
+--- !u!114 &1042221603487842477
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0075e165c066ef468078d5e94c1445c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.MonsterAttachment
+  attachmentKind: 1
+  loadContribution: 15
+  reachDistance: 1.3
+  attachmentDuration: 0.3
+  attachedLocalOffset: {x: 0, y: 0, z: 0}
+--- !u!114 &7289675468490257774
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ac5ab7c47c2c384292953245e139527, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.MonsterDamageable
+  maximumHealth: 30
+  vulnerableToNormalSword: 1
+--- !u!114 &6938067390150551492
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617952403120759435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d40bb3e739e354747bc5d9db0edd3828, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.AttachedMonsterAttack
+  attackRange: 5.5
+  impactDelay: 0.28
+  cooldown: 1.35
+  attackAnimationSpeed: 1.15
+  obstructionMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!1 &4979272319474032993
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8908365155304064296}
+  m_Layer: 0
+  m_Name: DetectionPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8908365155304064296
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4979272319474032993}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.25, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6935917936810763379}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &693562304963107585
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 8556652044860740936}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.55
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.55
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.55
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.34
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      propertyPath: m_Name
+      value: Zombie_Model
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4834941122323960788}
+  m_SourcePrefab: {fileID: 100100000, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+--- !u!1 &387713002903725648 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+  m_PrefabInstance: {fileID: 693562304963107585}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &4834941122323960788
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387713002903725648}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 657ecc992825c224d9311578b4cb2739, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!4 &1020837450296081642 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 62e9109494548e748a152aedf4967f67, type: 3}
+  m_PrefabInstance: {fileID: 693562304963107585}
+  m_PrefabAsset: {fileID: 0}

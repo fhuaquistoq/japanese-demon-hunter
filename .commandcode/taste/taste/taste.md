@@ -1,0 +1,22 @@
+# Taste
+- Writes requests in Spanish and expects responses/deliverables in Spanish. Confidence: 0.9
+- Requires the assistant to inspect the existing project state (relevant scripts, scene, Git status, installed packages/versions) before creating or modifying any files, and to avoid overwriting pre-existing changes. Confidence: 0.95
+- Explicitly forbids automatic git commits or pushes; wants changes left uncommitted for review. Confidence: 0.95
+- Forbids destructive or irreversible operations — e.g. `git reset --hard`, `git clean -fd`, deleting scenes/prefabs/scripts/models, Assets/Packages/ProjectSettings, or the `Library` cache — and expects a safe, reversible procedure with every modification documented and revertible. Confidence: 0.9
+- Before any test that mutates packages, project settings, or caches, expects a verifiable recovery backup of the project (including uncommitted work) made outside the repo, with risky/isolation tests run on a separate copy; caches like `Library` should only be rebuilt on a justified, evidence-backed hypothesis and in a copy. Confidence: 0.85
+- Delivers work in strictly-scoped phases and expects the assistant to complete only the requested phase without advancing to later phases. Confidence: 0.85
+- If a real environment (e.g., Unity Editor) is available, wants the assistant to actually execute the work there and save results, rather than merely preparing instructions; if unavailable, expects concrete manual-verification steps. Confidence: 0.8
+- Wants direct implementation (real code, files, assets) rather than explanations, pseudocode, or "how to" descriptions. Confidence: 0.85
+- Prefers using real project assets (e.g., imported 3D models) over placeholder primitives, using geometric stand-ins only as temporary fallbacks. Confidence: 0.75
+- Expects a structured completion report at the end: files created/modified, how to run/generate, tests actually executed, integration points, and known limitations; when blocked, expects a clear stopping point with evidence obtained, confirmed cause or open hypothesis, tests run and their results, files modified, changes reverted, current project state, and exact steps to continue. Confidence: 0.85
+- Demands honest verification reporting: never claim a test or check passed unless it was actually executed, and clearly state what must still be verified manually. Confidence: 0.85
+- Wants conclusions backed by evidence: separate the last log line from the root cause, do not blame a component merely because it appears in a log, and do not assume code is correct just because a previous compile succeeded. Confidence: 0.9
+- During debugging, expects the problem to be isolated methodically — one variable changed at a time, starting with the least invasive test — so it is clear which intervention changed the outcome. Confidence: 0.85
+- Wants the minimal change that fixes a verified defect, explicitly not a whole-tool rewrite when a small correction suffices. Confidence: 0.85
+- Requires verifying that the tools, methods, and their exact names/locations referenced or invoked really exist; no invented APIs or commands. Confidence: 0.85
+- Prefers modular, reusable architecture: shared base components and a single configurable system for related entities instead of duplicating logic per variant (e.g., one enemy AI/base and one spawner covering every type). Confidence: 0.8
+- Wants tunable values (speeds, health, damage, ranges, cooldowns, weights) exposed as Inspector/config parameters so behavior can be balanced without editing code. Confidence: 0.75
+- Respects team ownership boundaries: expects teammates' systems (VR rig, cart movement, horses, maps) to be left untouched and integrated via interfaces/events or adapters, and obsolete features to be safely decoupled/disabled rather than deleted. Confidence: 0.75
+- Requires Editor tooling to be idempotent and non-destructive: it must not duplicate components or overwrite the user's manual scene/Inspector modifications, and must be safely re-runnable. Confidence: 0.7
+- For VR work, insists the camera/XR Origin never be moved or pushed artificially, and that the player never be subjected to sudden forced displacements. Confidence: 0.7
+- Does not want exact asset or animation names assumed; expects the actually imported models and their available clips to be inspected and the implementation adapted to what really exists. Confidence: 0.7

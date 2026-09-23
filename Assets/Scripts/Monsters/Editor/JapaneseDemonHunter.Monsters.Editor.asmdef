@@ -1,0 +1,19 @@
+{
+    "name": "JapaneseDemonHunter.Monsters.Editor",
+    "rootNamespace": "JapaneseDemonHunter.Monsters.Editor",
+    "references": [
+        "JapaneseDemonHunter.Monsters",
+        "JapaneseDemonHunter.Prototype"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
