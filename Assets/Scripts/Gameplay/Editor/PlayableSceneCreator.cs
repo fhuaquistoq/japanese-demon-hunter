@@ -54,6 +54,9 @@ namespace JapaneseDemonHunter.GameplayEditor
 
         // 40 tiles of 18 m: a finite ride that ends at the fortified kingdom.
         private const int TotalRoadTiles = 40;
+        private const int RoadIntersectionStartChunk = RoadPathModel.DefaultIntersectionStartChunk;
+        private const int RoadIntersectionLengthChunks = RoadPathModel.DefaultIntersectionBranchLengthChunks;
+        private const float RoadIntersectionTurnDegrees = RoadPathModel.DefaultIntersectionTurnDegrees;
         // Horse.fbx measures 4.81 m from hooves to ears before scaling, and its head points to +Z,
         // so every instance is turned 180 degrees to face the direction of travel.
         private const float HorseTargetHeight = 2.35f;
@@ -356,6 +359,97 @@ namespace JapaneseDemonHunter.GameplayEditor
             {
                 suppressDialogs = false;
             }
+        }
+
+        /// <summary>
+        /// Idempotently upgrades only the generated road configuration. It does not regenerate the
+        /// scene and deliberately leaves gameplay, XR, monsters, horses and combat untouched.
+        /// </summary>
+        [MenuItem("Tools/Game/Upgrade Road To Three-Way Intersection")]
+        public static void UpgradeRoadToThreeWayIntersection()
+        {
+            if (!File.Exists(ScenePath))
+            {
+                Debug.LogWarning($"Playable scene not found: {ScenePath}");
+                return;
+            }
+
+            if (SceneManager.GetActiveScene().path != ScenePath)
+            {
+                if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                {
+                    return;
+                }
+
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            }
+
+            if (!ApplyThreeWayRoadToOpenScene(out string report))
+            {
+                throw new System.InvalidOperationException(report);
+            }
+
+            Debug.Log(report);
+        }
+
+        /// <summary>Batch entry point for the focused, non-destructive road upgrade.</summary>
+        public static void UpgradeRoadToThreeWayIntersectionFromCommandLine()
+        {
+            if (!File.Exists(ScenePath))
+            {
+                throw new FileNotFoundException("The playable scene does not exist.", ScenePath);
+            }
+
+            EditorSceneManager.SaveOpenScenes();
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            if (!ApplyThreeWayRoadToOpenScene(out string report))
+            {
+                throw new System.InvalidOperationException(report);
+            }
+
+            Debug.Log(report);
+        }
+
+        private static bool ApplyThreeWayRoadToOpenScene(out string report)
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            if (scene.path != ScenePath)
+            {
+                report = $"Open {ScenePath} first; the current scene is '{scene.path}'.";
+                return false;
+            }
+
+            ForestRoad road = Object.FindAnyObjectByType<ForestRoad>();
+            if (road == null)
+            {
+                report = $"{ScenePath} has no ForestRoad.";
+                return false;
+            }
+
+            Undo.RecordObject(road, "Configure three-way road intersection");
+            SetFloat(road, "roadWidth", 9.6f);
+            SetFloat(road, "forkDivergence", 6f);
+            SetBool(road, "enableThreeWayIntersection", true);
+            SetInt(road, "intersectionStartChunk", RoadIntersectionStartChunk);
+            SetInt(road, "intersectionBranchLengthChunks", RoadIntersectionLengthChunks);
+            SetFloat(road, "intersectionTurnDegrees", RoadIntersectionTurnDegrees);
+            EditorUtility.SetDirty(road);
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene))
+            {
+                report = $"Unity could not save {ScenePath}.";
+                return false;
+            }
+
+            RoadPathModel path = road.CreatePathModel();
+            bool valid = road.RoadWidth >= 8.4f && path.HasThreeWayIntersection &&
+                         path.IntersectionStartChunk == RoadIntersectionStartChunk &&
+                         path.IntersectionBranchLengthChunks == RoadIntersectionLengthChunks;
+            report = valid
+                ? $"Road upgraded in place: one {road.RoadWidth:0.0} m dirt road, then LEFT/STRAIGHT/RIGHT " +
+                  $"at {road.IntersectionDistance:0} m with {path.IntersectionTurnDegrees:0} degree side routes."
+                : "The road was saved, but its three-way intersection configuration is invalid.";
+            return valid;
         }
 
         // ---------------------------------------------------------------- environment
@@ -676,6 +770,9 @@ namespace JapaneseDemonHunter.GameplayEditor
                 SetFloatIfMissing(road, "heightAmplitude", 0.55f);
                 SetFloatIfMissing(road, "heightWavelength", 90f);
                 SetFloatIfMissing(road, "forkDivergence", 6f);
+                SetIntIfMissing(road, "intersectionStartChunk", RoadIntersectionStartChunk);
+                SetIntIfMissing(road, "intersectionBranchLengthChunks", RoadIntersectionLengthChunks);
+                SetFloatIfMissing(road, "intersectionTurnDegrees", RoadIntersectionTurnDegrees);
                 SetIntIfMissing(road, "forestRows", 3);
                 SetIntIfMissing(road, "treesPerRow", 5);
             }
@@ -1285,6 +1382,10 @@ namespace JapaneseDemonHunter.GameplayEditor
             SetFloat(road, "heightAmplitude", 0.55f);
             SetFloat(road, "heightWavelength", 90f);
             SetFloat(road, "forkDivergence", 6f);
+            SetBool(road, "enableThreeWayIntersection", true);
+            SetInt(road, "intersectionStartChunk", RoadIntersectionStartChunk);
+            SetInt(road, "intersectionBranchLengthChunks", RoadIntersectionLengthChunks);
+            SetFloat(road, "intersectionTurnDegrees", RoadIntersectionTurnDegrees);
             SetInt(road, "forestRows", 3);
             SetInt(road, "treesPerRow", 5);
             SetInt(road, "totalTiles", TotalRoadTiles);
@@ -1767,6 +1868,35 @@ namespace JapaneseDemonHunter.GameplayEditor
             ForestRoad road = Object.FindAnyObjectByType<ForestRoad>();
             Require(road != null, "ForestRoad exists.", failures);
             Require(road != null && road.TotalTiles > 0, "The road has a finite length ending at the kingdom.", failures);
+            if (road != null)
+            {
+                RoadPathModel path = road.CreatePathModel();
+                Require(road.RoadWidth >= 8.4f,
+                    $"The dirt road is wide enough for the carriage ({road.RoadWidth:0.0} m).", failures);
+                Require(path.HasThreeWayIntersection,
+                    "The road exposes one LEFT/STRAIGHT/RIGHT intersection.", failures);
+                Require(path.IntersectionStartChunk >= 5,
+                    "The level begins with one road before the intersection.", failures);
+                Require(!path.IsIntersectionBranchChunk(path.IntersectionStartChunk - 1) &&
+                        path.IsIntersectionBranchChunk(path.IntersectionStartChunk) &&
+                        !path.IsIntersectionBranchChunk(
+                            path.IntersectionStartChunk + path.IntersectionBranchLengthChunks),
+                    "The intersection is a single bounded section rather than repeated forks.", failures);
+
+                float routeDistance = path.IntersectionStartDistance + path.IntersectionBranchLength;
+                path.GetRoutePoseAtDistance(routeDistance, RoadRouteDirection.Left,
+                    out Vector3 leftRoute, out float leftHeading);
+                path.GetRoutePoseAtDistance(routeDistance, RoadRouteDirection.Straight,
+                    out Vector3 straightRoute, out float straightHeading);
+                path.GetRoutePoseAtDistance(routeDistance, RoadRouteDirection.Right,
+                    out Vector3 rightRoute, out float rightHeading);
+                Require(Vector3.Distance(leftRoute, straightRoute) > road.RoadWidth &&
+                        Vector3.Distance(rightRoute, straightRoute) > road.RoadWidth,
+                    "The three route paths are spatially distinct.", failures);
+                Require(Mathf.DeltaAngle(straightHeading, leftHeading) > 35f &&
+                        Mathf.DeltaAngle(straightHeading, rightHeading) < -35f,
+                    "Left and right routes use broad, recognizable turns.", failures);
+            }
 
             GameObject ground = GameObject.Find("Ground");
             Require(ground != null && ground.GetComponent<MonsterGroundSurface>() != null,

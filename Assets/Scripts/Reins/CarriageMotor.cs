@@ -43,8 +43,6 @@ namespace Reins
         private RoadPathModel _roadPath;
         private Vector3 _roadOriginOffset;
         private float _travelDistance;
-        private int _selectedForkStart = -1;
-        private int _branchChoice;
         private Vector3 _centerlinePosition;
         private float _speed;
         private int _lane;
@@ -120,24 +118,13 @@ namespace Reins
             if (followRoadCurvature && _roadPath != null)
             {
                 _travelDistance += _speed * deltaTime;
-                int forkStart = _roadPath.ForkStartAtDistance(_travelDistance);
-                if (forkStart >= 0 && forkStart != _selectedForkStart)
-                {
-                    _selectedForkStart = forkStart;
-                    _branchChoice = _lane != 0 ? _lane : ((forkStart / RoadPathModel.ForkPeriodChunks) % 2 == 0 ? -1 : 1);
-                }
-
                 _roadPath.GetPoseAtDistance(_travelDistance, out var roadPosition, out var heading);
-                float branchOffset = forkStart >= 0
-                    ? _roadPath.BranchOffsetAtDistance(_travelDistance, _branchChoice) : 0f;
-                float branchYaw = forkStart >= 0
-                    ? _roadPath.BranchYawAtDistance(_travelDistance, _branchChoice) : 0f;
-                float yaw = Mathf.MoveTowardsAngle(transform.eulerAngles.y, heading + branchYaw,
+                float yaw = Mathf.MoveTowardsAngle(transform.eulerAngles.y, heading,
                     maximumYawRate * deltaTime);
                 transform.rotation = Quaternion.Euler(0f, yaw, 0f);
                 _centerlinePosition = _forestRoad.transform.TransformPoint(roadPosition) + _roadOriginOffset;
                 transform.position = _centerlinePosition +
-                                     transform.right * (_laneTransition.Step(deltaTime) + branchOffset);
+                                     transform.right * _laneTransition.Step(deltaTime);
             }
             else
             {

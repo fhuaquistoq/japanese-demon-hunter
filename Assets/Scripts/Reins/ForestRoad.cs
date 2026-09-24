@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Reins
@@ -19,7 +20,16 @@ namespace Reins
         [SerializeField, Min(10f)] private float turnRadius = RoadPathModel.DefaultTurnRadius;
         [SerializeField, Range(0f, 1f)] private float heightAmplitude = 0.55f;
         [SerializeField, Min(25f)] private float heightWavelength = 90f;
+        [Tooltip("Legacy clearance value. A positive value enables the intersection without breaking existing scenes.")]
         [SerializeField, Range(0f, 10f)] private float forkDivergence = 6f;
+
+        [Header("Interseccion de tres rutas")]
+        [SerializeField] private bool enableThreeWayIntersection = true;
+        [SerializeField, Min(2)] private int intersectionStartChunk = RoadPathModel.DefaultIntersectionStartChunk;
+        [SerializeField, Min(2)] private int intersectionBranchLengthChunks =
+            RoadPathModel.DefaultIntersectionBranchLengthChunks;
+        [SerializeField, Range(15f, 75f)] private float intersectionTurnDegrees =
+            RoadPathModel.DefaultIntersectionTurnDegrees;
 
         [Header("Modelos reales (opcional)")]
         [SerializeField] private GameObject[] treePrefabs;
@@ -59,6 +69,8 @@ namespace Reins
         public int CurrentChunkIndex => _cartChunkIndex;
         public int TotalTiles => totalTiles;
         public bool HasKingdom => _kingdom != null;
+        public float RoadWidth => roadWidth;
+        public float IntersectionDistance => intersectionStartChunk * tileLength;
 
         private sealed class Tile
         {
@@ -66,6 +78,9 @@ namespace Reins
             public int chunkIndex;
             public readonly Transform[] stones = new Transform[3];
             public readonly Transform[] branches = new Transform[2];
+            public readonly Transform[] branchLeftVerges = new Transform[2];
+            public readonly Transform[] branchRightVerges = new Transform[2];
+            public readonly List<Transform> vegetation = new List<Transform>();
             public Transform mainRoad;
             public readonly bool[] consumed = new bool[3];
             public int blockedMask;
@@ -321,10 +336,19 @@ namespace Reins
 
             for (int branch = -1; branch <= 1; branch += 2)
             {
+                int branchIndex = (branch + 1) / 2;
                 CreatePart(tileRoot, "Branch_" + branch, PrimitiveType.Cube,
                     new Vector3(0f, -0.055f, -tileLength * 0.5f),
                     new Vector3(roadWidth, 0.11f, tileLength + 0.2f), _roadMaterial);
-                tile.branches[(branch + 1) / 2] = tileRoot.Find("Branch_" + branch);
+                tile.branches[branchIndex] = tileRoot.Find("Branch_" + branch);
+                CreatePart(tileRoot, "BranchVergeLeft_" + branch, PrimitiveType.Cube,
+                    new Vector3(0f, -0.03f, -tileLength * 0.5f),
+                    new Vector3(1.3f, 0.08f, tileLength), _vergeMaterial);
+                tile.branchLeftVerges[branchIndex] = tileRoot.Find("BranchVergeLeft_" + branch);
+                CreatePart(tileRoot, "BranchVergeRight_" + branch, PrimitiveType.Cube,
+                    new Vector3(0f, -0.03f, -tileLength * 0.5f),
+                    new Vector3(1.3f, 0.08f, tileLength), _vergeMaterial);
+                tile.branchRightVerges[branchIndex] = tileRoot.Find("BranchVergeRight_" + branch);
             }
 
             for (var row = 0; row < forestRows; row++)
@@ -336,12 +360,12 @@ namespace Reins
                         int seed = Mathf.Abs(index * 53 + row * 17 + tree * 11 + side * 3);
                         float stagger = ((seed % 7) - 3) * 0.26f;
                         float z = -(tree + 0.5f) * tileLength / treesPerRow + stagger;
-                        float forkClearance = forkDivergence;
-                        float x = side * (roadWidth * 0.5f + 2f + forkClearance +
+                        float x = side * (roadWidth * 0.5f + 2f +
                                           row * forestRowSpacing + (seed % 4) * 0.55f);
                         var treeRoot = new GameObject("Tree_" + side + "_" + row + "_" + tree).transform;
                         treeRoot.SetParent(tileRoot, false);
                         treeRoot.localPosition = new Vector3(x, 0f, z);
+                        tile.vegetation.Add(treeRoot);
 
                         if (row == 0 && TryCreateTreeVisual(treeRoot, seed)) continue;
                         float height = 3.5f + (seed % 4) * 0.55f;
@@ -418,26 +442,65 @@ namespace Reins
 
         private void ConfigureBranches(Tile tile, int chunkIndex)
         {
-            bool fork = _path.HasForks && RoadPathModel.IsForkChunk(chunkIndex);
-            if (tile.mainRoad != null) tile.mainRoad.gameObject.SetActive(!fork);
+            bool intersection = _path.IsIntersectionBranchChunk(chunkIndex);
+            if (tile.mainRoad != null) tile.mainRoad.gameObject.SetActive(true);
             float distance = (chunkIndex + 0.5f) * tileLength;
             for (int side = 0; side < tile.branches.Length; side++)
             {
                 Transform branch = tile.branches[side];
                 if (branch == null) continue;
                 int sign = side == 0 ? -1 : 1;
-                branch.gameObject.SetActive(fork);
-                if (fork)
+                branch.gameObject.SetActive(intersection);
+                SetActive(tile.branchLeftVerges[side], intersection);
+                SetActive(tile.branchRightVerges[side], intersection);
+                if (intersection)
                 {
-                    branch.localPosition = new Vector3(
-                        _path.BranchOffsetAtDistance(distance, sign), -0.055f, -tileLength * 0.5f);
+                    RoadRouteDirection route = sign < 0
+                        ? RoadRouteDirection.Left
+                        : RoadRouteDirection.Right;
+                    _path.GetRoutePoseAtDistance(distance, route, out Vector3 position, out _);
+                    Quaternion rotation = _path.GetRouteRotationAtDistance(distance, route);
+                    PositionPathPart(branch, position, rotation, 0f, -0.055f);
+                    PositionPathPart(tile.branchLeftVerges[side], position, rotation,
+                        -roadWidth * 0.5f - 0.65f, -0.03f);
+                    PositionPathPart(tile.branchRightVerges[side], position, rotation,
+                        roadWidth * 0.5f + 0.65f, -0.03f);
                 }
+            }
+
+            // The crossing is deliberately open. Decorations return automatically when this
+            // pooled tile is recycled outside the intersection.
+            for (int i = 0; i < tile.vegetation.Count; i++)
+            {
+                SetActive(tile.vegetation[i], !intersection);
             }
         }
 
-        private static void ConfigureObstacleGroup(Tile tile, int groupIndex)
+        private void PositionPathPart(Transform part, Vector3 localPosition, Quaternion localRotation,
+            float lateralOffset, float verticalOffset)
         {
-            tile.blockedMask = groupIndex < 2 || RoadPathModel.IsForkChunk(groupIndex)
+            if (part == null)
+            {
+                return;
+            }
+
+            Quaternion worldRotation = transform.rotation * localRotation;
+            Vector3 worldPosition = transform.TransformPoint(localPosition) +
+                                    worldRotation * new Vector3(lateralOffset, verticalOffset, 0f);
+            part.SetPositionAndRotation(worldPosition, worldRotation);
+        }
+
+        private static void SetActive(Transform target, bool active)
+        {
+            if (target != null)
+            {
+                target.gameObject.SetActive(active);
+            }
+        }
+
+        private void ConfigureObstacleGroup(Tile tile, int groupIndex)
+        {
+            tile.blockedMask = groupIndex < 2 || _path.IsIntersectionBranchChunk(groupIndex)
                 ? 0 : ObstacleSchedule.BlockedLaneMask(groupIndex);
             for (var laneIndex = 0; laneIndex < 3; laneIndex++)
             {
@@ -515,7 +578,8 @@ namespace Reins
                 ? Mathf.Clamp(totalTiles + 1, poolSize + 1, MaximumChunks)
                 : MaximumChunks;
             return new RoadPathModel(chunks, tileLength, curvatureScale, turnRadius,
-                heightAmplitude, heightWavelength, forkDivergence);
+                heightAmplitude, heightWavelength, forkDivergence, enableThreeWayIntersection,
+                intersectionStartChunk, intersectionBranchLengthChunks, intersectionTurnDegrees);
         }
 
         public bool TryStopOnRock(Vector3 previousPosition, Vector3 currentPosition)
@@ -551,7 +615,9 @@ namespace Reins
 
         public static int GetObstacleBlockedLaneMask(int groupIndex)
         {
-            return ObstacleSchedule.BlockedLaneMask(groupIndex);
+            return groupIndex < 2 || RoadPathModel.IsForkChunk(groupIndex)
+                ? 0
+                : ObstacleSchedule.BlockedLaneMask(groupIndex);
         }
 
         private static void FitUniformHeight(GameObject instance, float targetHeight)
@@ -687,8 +753,13 @@ namespace Reins
 
         private void OnDrawGizmos()
         {
-            var count = Mathf.Clamp(tileCount, 6, 10);
             var model = CreatePathModel();
+            var count = Mathf.Max(Mathf.Clamp(tileCount, 6, 10),
+                model.IntersectionStartChunk + model.IntersectionBranchLengthChunks);
+            if (totalTiles > 0)
+            {
+                count = Mathf.Min(count, totalTiles);
+            }
             var width = Mathf.Max(roadWidth, laneWidth * 3f);
             var rootRotation = transform.rotation;
             var rootPosition = transform.position;
@@ -717,6 +788,41 @@ namespace Reins
                 Gizmos.color = new Color(0.16f, 0.38f, 0.13f, 0.8f);
                 Gizmos.DrawCube(new Vector3(-(width * 0.5f + 0.65f), 0f, 0f), new Vector3(1.3f, 0.06f, tileLength));
                 Gizmos.DrawCube(new Vector3(width * 0.5f + 0.65f, 0f, 0f), new Vector3(1.3f, 0.06f, tileLength));
+
+                Gizmos.matrix = Matrix4x4.identity;
+            }
+
+            if (model.HasThreeWayIntersection)
+            {
+                int endChunk = model.IntersectionStartChunk + model.IntersectionBranchLengthChunks;
+                for (int chunk = model.IntersectionStartChunk; chunk < endChunk; chunk++)
+                {
+                    if (totalTiles > 0 && chunk >= totalTiles)
+                    {
+                        break;
+                    }
+
+                    float distance = (chunk + 0.5f) * tileLength;
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        RoadRouteDirection route = side < 0
+                            ? RoadRouteDirection.Left
+                            : RoadRouteDirection.Right;
+                        model.GetRoutePoseAtDistance(distance, route, out Vector3 localPosition, out _);
+                        Quaternion rotation = rootRotation * model.GetRouteRotationAtDistance(distance, route);
+                        Vector3 center = transform.TransformPoint(localPosition) +
+                                         rotation * Vector3.up * -0.055f;
+
+                        Gizmos.matrix = Matrix4x4.TRS(center, rotation, Vector3.one);
+                        Gizmos.color = new Color(0.43f, 0.34f, 0.24f, 0.9f);
+                        Gizmos.DrawCube(Vector3.zero, new Vector3(width, 0.09f, tileLength));
+                        Gizmos.color = new Color(0.16f, 0.38f, 0.13f, 0.8f);
+                        Gizmos.DrawCube(new Vector3(-(width * 0.5f + 0.65f), 0.02f, 0f),
+                            new Vector3(1.3f, 0.06f, tileLength));
+                        Gizmos.DrawCube(new Vector3(width * 0.5f + 0.65f, 0.02f, 0f),
+                            new Vector3(1.3f, 0.06f, tileLength));
+                    }
+                }
 
                 Gizmos.matrix = Matrix4x4.identity;
             }

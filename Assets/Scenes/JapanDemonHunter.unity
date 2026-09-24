@@ -4645,6 +4645,10 @@ MonoBehaviour:
   heightAmplitude: 0.55
   heightWavelength: 90
   forkDivergence: 6
+  enableThreeWayIntersection: 1
+  intersectionStartChunk: 7
+  intersectionBranchLengthChunks: 5
+  intersectionTurnDegrees: 55
   treePrefabs:
   - {fileID: 919132149155446097, guid: cc7a380608c87044eb2d26667efc1b2d, type: 3}
   - {fileID: 919132149155446097, guid: 8b088b1f30efa7344a3936ef666304e0, type: 3}

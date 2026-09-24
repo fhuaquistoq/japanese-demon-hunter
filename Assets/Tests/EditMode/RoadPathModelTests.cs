@@ -135,34 +135,42 @@ namespace Reins.Tests
         }
 
         [Test]
-        public void ForksAppearDeterministically()
+        public void ExactlyOneIntersectionAppearsAfterTheInitialRoad()
         {
-            Assert.IsFalse(RoadPathModel.IsForkChunk(RoadPathModel.ForkFirstChunk - 1));
-            Assert.IsTrue(RoadPathModel.IsForkChunk(RoadPathModel.ForkFirstChunk));
-            Assert.IsTrue(RoadPathModel.IsForkChunk(
-                RoadPathModel.ForkFirstChunk + RoadPathModel.ForkLengthChunks - 1));
-            Assert.IsFalse(RoadPathModel.IsForkChunk(
-                RoadPathModel.ForkFirstChunk + RoadPathModel.ForkLengthChunks));
+            int start = RoadPathModel.DefaultIntersectionStartChunk;
+            int length = RoadPathModel.DefaultIntersectionBranchLengthChunks;
 
-            int period = RoadPathModel.ForkPeriodChunks + RoadPathModel.ForkLengthChunks;
-            Assert.IsTrue(RoadPathModel.IsForkChunk(RoadPathModel.ForkFirstChunk + period));
+            Assert.IsFalse(RoadPathModel.IsForkChunk(start - 1));
+            for (int chunk = start; chunk < start + length; chunk++)
+            {
+                Assert.IsTrue(RoadPathModel.IsForkChunk(chunk), $"chunk {chunk} should form the intersection");
+            }
+
+            Assert.IsFalse(RoadPathModel.IsForkChunk(start + length));
+            Assert.IsFalse(RoadPathModel.IsForkChunk(start + length + 20),
+                "the level must not create repeated intersections");
         }
 
         [Test]
-        public void BranchOffsetsSeparateAndComeBackTogether()
+        public void InitialRoadIsSharedThenRoutesSeparateAndDoNotRejoin()
         {
-            var model = new RoadPathModel(64, 18f, 0.5f, 100f, 0f, 55f, 4.6f);
-            int start = RoadPathModel.ForkFirstChunk;
+            var model = new RoadPathModel(64, 18f, 0f, 100f, 0f, 55f, 6f);
+            float before = model.IntersectionStartDistance - 1f;
+            model.GetRoutePoseAtDistance(before, RoadRouteDirection.Left, out Vector3 beforeLeft, out _);
+            model.GetRoutePoseAtDistance(before, RoadRouteDirection.Straight, out Vector3 beforeCentre, out _);
+            model.GetRoutePoseAtDistance(before, RoadRouteDirection.Right, out Vector3 beforeRight, out _);
+            Assert.AreEqual(beforeCentre, beforeLeft);
+            Assert.AreEqual(beforeCentre, beforeRight);
 
-            Assert.AreEqual(0f, model.BranchOffset(start, 1), 0.01f, "a fork starts on the centreline");
-            Assert.AreEqual(0f, model.BranchOffset(start + RoadPathModel.ForkLengthChunks, 1), 0.01f,
-                "branches must rejoin");
+            float afterTurn = model.IntersectionStartDistance + model.IntersectionBranchLength + 18f;
+            model.GetRoutePoseAtDistance(afterTurn, RoadRouteDirection.Left, out Vector3 left, out float leftHeading);
+            model.GetRoutePoseAtDistance(afterTurn, RoadRouteDirection.Straight, out Vector3 centre, out float centreHeading);
+            model.GetRoutePoseAtDistance(afterTurn, RoadRouteDirection.Right, out Vector3 right, out float rightHeading);
 
-            float left = model.BranchOffset(start + 2, -1);
-            float right = model.BranchOffset(start + 2, 1);
-            Assert.Less(left, -1f);
-            Assert.Greater(right, 1f);
-            Assert.AreEqual(-left, right, 0.001f, "both branches must mirror each other");
+            Assert.Less(left.x, centre.x - 10f);
+            Assert.Greater(right.x, centre.x + 10f);
+            Assert.Greater(Mathf.DeltaAngle(centreHeading, leftHeading), 40f);
+            Assert.Less(Mathf.DeltaAngle(centreHeading, rightHeading), -40f);
         }
 
         [Test]
@@ -177,16 +185,41 @@ namespace Reins.Tests
         }
 
         [Test]
-        public void BranchOffsetAtDistanceIsContinuousAcrossChunkBoundaries()
+        public void SideRouteTurnsAreContinuousAndNeverAbrupt()
         {
-            var model = new RoadPathModel(64, 18f, 0.5f, 100f, 0f, 55f, 4.6f);
-            float previous = model.BranchOffsetAtDistance(0f, 1);
-            for (float distance = 1f; distance < 40f * 18f; distance += 1f)
+            var model = new RoadPathModel(64, 18f, 0f, 100f, 0f, 55f, 6f);
+            float previousHeading = 0f;
+            model.GetRoutePoseAtDistance(model.IntersectionStartDistance, RoadRouteDirection.Left,
+                out Vector3 previousPosition, out previousHeading);
+            float end = model.IntersectionStartDistance + model.IntersectionBranchLength;
+            for (float distance = model.IntersectionStartDistance + 1f; distance <= end; distance += 1f)
             {
-                float current = model.BranchOffsetAtDistance(distance, 1);
-                Assert.Less(Mathf.Abs(current - previous), 1.2f, "the branch must not jump between chunks");
-                previous = current;
+                model.GetRoutePoseAtDistance(distance, RoadRouteDirection.Left,
+                    out Vector3 currentPosition, out float currentHeading);
+                Assert.That(Vector3.Distance(previousPosition, currentPosition), Is.EqualTo(1f).Within(0.02f));
+                Assert.Less(Mathf.Abs(Mathf.DeltaAngle(previousHeading, currentHeading)), 1f,
+                    "the route must use a broad, smooth turn rather than a sharp corner");
+                previousPosition = currentPosition;
+                previousHeading = currentHeading;
             }
+        }
+
+        [Test]
+        public void RouteDataExposesLeftStraightAndRightForFutureSelection()
+        {
+            var model = new RoadPathModel(64, 18f, 0.4f, 100f, 0.4f, 90f, 6f);
+            Assert.IsTrue(model.HasThreeWayIntersection);
+
+            float distance = model.IntersectionStartDistance + model.IntersectionBranchLength;
+            model.GetRoutePoseAtDistance(distance, RoadRouteDirection.Left, out Vector3 left, out _);
+            model.GetRoutePoseAtDistance(distance, RoadRouteDirection.Straight, out Vector3 straight, out _);
+            model.GetRoutePoseAtDistance(distance, RoadRouteDirection.Right, out Vector3 right, out _);
+
+            Assert.Greater(Vector3.Distance(left, straight), 20f);
+            Assert.Greater(Vector3.Distance(right, straight), 20f);
+            Assert.Greater(Vector3.Distance(left, right), 40f);
+            Assert.That(left.y, Is.InRange(0f, 0.4f));
+            Assert.That(right.y, Is.InRange(0f, 0.4f));
         }
     }
 }

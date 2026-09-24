@@ -2,10 +2,18 @@ using UnityEngine;
 
 namespace Reins
 {
+    /// <summary>The three routes exposed by the single road intersection.</summary>
+    public enum RoadRouteDirection
+    {
+        Left = -1,
+        Straight = 0,
+        Right = 1
+    }
+
     /// <summary>
-    /// Deterministic centreline of the forest road. It integrates a fixed curvature schedule, adds
-    /// gentle vertical undulation and can split into two branches that diverge and rejoin. Pure and
-    /// allocation-free per query, so it can be unit tested and read every frame.
+    /// Deterministic centreline of the forest road. It integrates a fixed curvature schedule,
+    /// adds gentle vertical undulation and exposes one three-way intersection. Pure and
+    /// allocation-free per query, so the road renderer and a future route selector can share it.
     /// </summary>
     public sealed class RoadPathModel
     {
@@ -13,11 +21,13 @@ namespace Reins
         public const float DefaultTurnRadius = 100f;
         public const float DefaultHeightAmplitude = 0f;
         public const float DefaultHeightWavelength = 55f;
+        public const int DefaultIntersectionStartChunk = 7;
+        public const int DefaultIntersectionBranchLengthChunks = 5;
+        public const float DefaultIntersectionTurnDegrees = 55f;
 
-        /// <summary>A fork starts every this many chunks and lasts <see cref="ForkLengthChunks"/>.</summary>
-        public const int ForkPeriodChunks = 13;
-        public const int ForkLengthChunks = 5;
-        public const int ForkFirstChunk = 5;
+        // Compatibility aliases for tooling that still describes the old repeated forks.
+        public const int ForkFirstChunk = DefaultIntersectionStartChunk;
+        public const int ForkLengthChunks = DefaultIntersectionBranchLengthChunks;
 
         private const int StraightChunks = 5;
         private const int CurvingChunks = 2;
@@ -34,7 +44,11 @@ namespace Reins
             float turnRadius = DefaultTurnRadius,
             float heightAmplitude = DefaultHeightAmplitude,
             float heightWavelength = DefaultHeightWavelength,
-            float forkDivergence = 0f)
+            float forkDivergence = 0f,
+            bool enableThreeWayIntersection = true,
+            int intersectionStartChunk = DefaultIntersectionStartChunk,
+            int intersectionBranchLengthChunks = DefaultIntersectionBranchLengthChunks,
+            float intersectionTurnDegrees = DefaultIntersectionTurnDegrees)
         {
             ChunkLength = Mathf.Max(0.01f, chunkLength);
             CurvatureScale = curvatureScale;
@@ -44,6 +58,12 @@ namespace Reins
             ForkDivergence = Mathf.Max(0f, forkDivergence);
 
             chunkCount = Mathf.Max(1, chunkCount);
+            IntersectionStartChunk = Mathf.Clamp(intersectionStartChunk, 1, Mathf.Max(1, chunkCount - 1));
+            IntersectionBranchLengthChunks = Mathf.Max(2, intersectionBranchLengthChunks);
+            IntersectionTurnDegrees = Mathf.Clamp(intersectionTurnDegrees, 15f, 75f);
+            HasThreeWayIntersection = enableThreeWayIntersection && ForkDivergence > 0.01f &&
+                                      IntersectionStartChunk < chunkCount;
+
             chunkX = new float[chunkCount];
             chunkY = new float[chunkCount];
             chunkZ = new float[chunkCount];
@@ -79,10 +99,22 @@ namespace Reins
         public float TurnRadius { get; }
         public float HeightAmplitude { get; }
         public float HeightWavelength { get; }
+
+        /// <summary>
+        /// Legacy serialized value retained to avoid breaking existing scenes. A positive value
+        /// enables the intersection and remains useful as decoration clearance in ForestRoad.
+        /// </summary>
         public float ForkDivergence { get; }
+
         public int ChunkCount => chunkHeadingDegrees.Length;
-        public bool HasForks => ForkDivergence > 0.01f;
         public bool HasSlopes => Mathf.Abs(HeightAmplitude) > 0.01f;
+        public bool HasThreeWayIntersection { get; }
+        public bool HasForks => HasThreeWayIntersection;
+        public int IntersectionStartChunk { get; }
+        public int IntersectionBranchLengthChunks { get; }
+        public float IntersectionTurnDegrees { get; }
+        public float IntersectionStartDistance => IntersectionStartChunk * ChunkLength;
+        public float IntersectionBranchLength => IntersectionBranchLengthChunks * ChunkLength;
 
         /// <summary>Signed curvature (1/radius) of a chunk. Positive turns left, negative right.</summary>
         public static float CurvatureForChunk(int chunkIndex, float curvatureScale, float turnRadius)
@@ -106,8 +138,7 @@ namespace Reins
 
         /// <summary>
         /// Gentle rise and fall along the road, kept at or above the flat ground plane so the terrain
-        /// never pokes through the carriageway. Two out of phase waves stop it feeling like a
-        /// metronome, and the amplitude stays small enough to be comfortable in a headset.
+        /// never pokes through the carriageway. Two out of phase waves stop it feeling repetitive.
         /// </summary>
         public static float HeightAtDistance(float distance, float amplitude, float wavelength)
         {
@@ -175,6 +206,65 @@ namespace Reins
             headingDegrees = Mathf.LerpAngle(chunkHeadingDegrees[index], chunkHeadingDegrees[index + 1], fraction);
         }
 
+        /// <summary>
+        /// Pose of LEFT, STRAIGHT or RIGHT. Before the intersection all three queries return the
+        /// same main road. Side routes follow a broad circular arc and then continue on their final
+        /// heading, making them usable path data rather than decorative meshes.
+        /// </summary>
+        public void GetRoutePoseAtDistance(float distance, RoadRouteDirection route,
+            out Vector3 position, out float headingDegrees)
+        {
+            distance = Mathf.Max(0f, distance);
+            if (route == RoadRouteDirection.Straight || !HasThreeWayIntersection ||
+                distance <= IntersectionStartDistance)
+            {
+                GetPoseAtDistance(distance, out position, out headingDegrees);
+                return;
+            }
+
+            GetChunkPose(IntersectionStartChunk, out Vector3 origin, out float originHeading);
+            float routeDistance = distance - IntersectionStartDistance;
+            float turnLength = Mathf.Max(ChunkLength, IntersectionBranchLength);
+            float clampedTurnDistance = Mathf.Min(routeDistance, turnLength);
+            float turnRadians = IntersectionTurnDegrees * Mathf.Deg2Rad;
+            float radius = turnLength / turnRadians;
+            float angle = clampedTurnDistance / radius;
+            int side = (int)route;
+
+            var localOffset = new Vector3(
+                side * radius * (1f - Mathf.Cos(angle)),
+                0f,
+                -radius * Mathf.Sin(angle));
+
+            float extraDistance = Mathf.Max(0f, routeDistance - turnLength);
+            float localHeading = -side * IntersectionTurnDegrees;
+            if (extraDistance > 0f)
+            {
+                localOffset += Quaternion.Euler(0f, localHeading, 0f) * Vector3.back * extraDistance;
+            }
+
+            position = origin + Quaternion.Euler(0f, originHeading, 0f) * localOffset;
+            position.y = HeightAtDistance(distance);
+            headingDegrees = originHeading - side * angle * Mathf.Rad2Deg;
+        }
+
+        public Quaternion GetRouteRotationAtDistance(float distance, RoadRouteDirection route)
+        {
+            const float probe = 0.5f;
+            GetRoutePoseAtDistance(Mathf.Max(0f, distance - probe), route, out Vector3 behind, out _);
+            GetRoutePoseAtDistance(distance + probe, route, out Vector3 ahead, out float heading);
+            Vector3 direction = ahead - behind;
+            return direction.sqrMagnitude > 1e-6f
+                ? Quaternion.LookRotation(-direction.normalized, Vector3.up)
+                : Quaternion.Euler(0f, heading, 0f);
+        }
+
+        public bool IsIntersectionBranchChunk(int chunkIndex)
+        {
+            return HasThreeWayIntersection && chunkIndex >= IntersectionStartChunk &&
+                   chunkIndex < IntersectionStartChunk + IntersectionBranchLengthChunks;
+        }
+
         private Vector3 GetChunkPositionRaw(int index)
         {
             return new Vector3(chunkX[index], chunkY[index], chunkZ[index]);
@@ -185,20 +275,13 @@ namespace Reins
             return chunkHeadingDegrees[Mathf.Clamp(chunkIndex, 0, ChunkCount - 1)];
         }
 
-        // ------------------------------------------------------------------ forks
-
-        /// <summary>Chunk the fork containing <paramref name="chunkIndex"/> starts at, or -1.</summary>
+        // Compatibility helpers used by existing tooling. They now describe the one intersection.
         public static int ForkIndexForChunk(int chunkIndex)
         {
-            int shifted = chunkIndex - ForkFirstChunk;
-            if (shifted < 0)
-            {
-                return -1;
-            }
-
-            int period = ForkPeriodChunks + ForkLengthChunks;
-            int within = shifted % period;
-            return within < ForkLengthChunks ? chunkIndex - within : -1;
+            return chunkIndex >= DefaultIntersectionStartChunk &&
+                   chunkIndex < DefaultIntersectionStartChunk + DefaultIntersectionBranchLengthChunks
+                ? DefaultIntersectionStartChunk
+                : -1;
         }
 
         public static bool IsForkChunk(int chunkIndex)
@@ -206,88 +289,48 @@ namespace Reins
             return ForkIndexForChunk(chunkIndex) >= 0;
         }
 
-        /// <summary>0 at the start of a fork, 1 at the end, negative when outside a fork.</summary>
         public static float ForkProgress(int chunkIndex)
         {
             int start = ForkIndexForChunk(chunkIndex);
-            return start < 0 ? -1f : (chunkIndex - start) / (float)ForkLengthChunks;
+            return start < 0 ? -1f : (chunkIndex - start) / (float)DefaultIntersectionBranchLengthChunks;
         }
 
-        /// <summary>Fork start chunk that owns a distance, or -1 outside a fork.</summary>
         public int ForkStartAtDistance(float distance)
         {
-            if (!HasForks)
-            {
-                return -1;
-            }
-
             int chunkIndex = Mathf.FloorToInt(Mathf.Max(0f, distance) / ChunkLength);
-            return ForkIndexForChunk(chunkIndex);
+            return IsIntersectionBranchChunk(chunkIndex) ? IntersectionStartChunk : -1;
         }
 
-        /// <summary>Lateral separation of a branch from the centreline, in metres.</summary>
         public float BranchOffset(int chunkIndex, int branch)
         {
-            if (!HasForks)
-            {
-                return 0f;
-            }
-
-            int start = ForkIndexForChunk(chunkIndex);
-            if (start < 0)
-            {
-                return 0f;
-            }
-
-            float progress = (chunkIndex - start) / (float)ForkLengthChunks;
-            return branch * ForkDivergence * Shape(progress);
+            return BranchOffsetAtDistance(chunkIndex * ChunkLength, branch);
         }
 
         public float BranchOffsetAtDistance(float distance, int branch)
         {
-            if (!HasForks)
+            if (branch == 0 || !HasThreeWayIntersection)
             {
                 return 0f;
             }
 
-            float chunkPosition = Mathf.Max(0f, distance) / ChunkLength;
-            int chunkIndex = Mathf.FloorToInt(chunkPosition);
-            float fraction = chunkPosition - chunkIndex;
-            int start = ForkIndexForChunk(chunkIndex);
-            if (start < 0)
-            {
-                // The tail of a fork can still overlap the chunk we are standing on.
-                start = ForkIndexForChunk(chunkIndex - 1);
-                if (start < 0)
-                {
-                    return 0f;
-                }
-
-                fraction += 1f;
-            }
-
-            float progress = (chunkIndex - start + fraction) / ForkLengthChunks;
-            return branch * ForkDivergence * Shape(progress);
+            GetPoseAtDistance(distance, out Vector3 centre, out float centreHeading);
+            GetRoutePoseAtDistance(distance, branch < 0 ? RoadRouteDirection.Left : RoadRouteDirection.Right,
+                out Vector3 route, out _);
+            Vector3 right = Quaternion.Euler(0f, centreHeading, 0f) * Vector3.right;
+            return Vector3.Dot(route - centre, right);
         }
 
-        /// <summary>Heading change, in degrees, that the branch adds at a given distance.</summary>
         public float BranchYawAtDistance(float distance, int branch)
         {
-            if (!HasForks)
+            if (branch == 0 || !HasThreeWayIntersection)
             {
                 return 0f;
             }
 
-            const float probe = 0.75f;
-            float behind = BranchOffsetAtDistance(distance - probe, branch);
-            float ahead = BranchOffsetAtDistance(distance + probe, branch);
-            return Mathf.Atan((ahead - behind) / (2f * probe)) * Mathf.Rad2Deg;
-        }
-
-        /// <summary>Where the fork sits inside its own length: 0 -> 1 -> 0, so branches rejoin.</summary>
-        private static float Shape(float progress)
-        {
-            return Mathf.Sin(Mathf.Clamp01(progress) * Mathf.PI);
+            GetPoseAtDistance(distance, out _, out float centreHeading);
+            GetRoutePoseAtDistance(distance, branch < 0 ? RoadRouteDirection.Left : RoadRouteDirection.Right,
+                out _, out float routeHeading);
+            return Mathf.DeltaAngle(centreHeading, routeHeading);
         }
     }
 }

@@ -771,6 +771,15 @@ MonoBehaviour:
   vehicleRoot: {fileID: 1450310778}
   stoneLaneWidth: 1.15
   stoneDepth: 0.65
+  curvatureScale: 1
+  turnRadius: 100
+  heightAmplitude: 0.55
+  heightWavelength: 90
+  forkDivergence: 6
+  enableThreeWayIntersection: 1
+  intersectionStartChunk: 7
+  intersectionBranchLengthChunks: 5
+  intersectionTurnDegrees: 55
 --- !u!1 &943869430
 GameObject:
   m_ObjectHideFlags: 0
