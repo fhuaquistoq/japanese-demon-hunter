@@ -36,3 +36,11 @@
 - Prefers out-of-view objects not to be rendered: when an object is outside the visible scene it should only have its position simulated until it becomes visible, then be rendered. Confidence: 0.6
 - Wants a fully enveloping environment: turning the camera in any direction should only ever reveal layered scenery, never empty void/space. Confidence: 0.6
 - Prefers AI-tool configuration (e.g. skills, agent config) scoped inside the project and versionable with the repo — leading to `.codex/skills/` over copying into the global `~/.codex/skills` — and wants such additions left untracked for them to commit. Confidence: 0.6
+- For VR/immersive work, rejects 2D screen-space UI entirely — no HUD, VR panel, or visible timer — and wants game state communicated diegetically inside the world (e.g. the view tinting red as health drops instead of a health bar). Confidence: 0.85
+- Wants test runs to produce visual evidence: capture screenshots during testing and save them into a folder inside the project. Confidence: 0.75
+- Every interaction with the environment should yield its own feedback loop (a sound and/or a physical reaction tied to the action, matching feedback to the actual event) so the world feels natural. Confidence: 0.65
+- Treats numeric targets he states (e.g. "maximum 5 minutes") as intent/guidance for feel and pacing rather than hard rules, and prefers the design to allow a favourable player outcome even when the stated number is exceeded. Confidence: 0.6
+- Describes bugs in colloquial, non-technical terms (e.g. "la soga", "los palos") instead of exact component/scene names, expecting the assistant to map those words to the real objects and confirm the precise symptom before applying a fix. Confidence: 0.55
+- For VR testing, expects the XR Simulator to be avoided as a substitute for real device behaviour. Confidence: 0.55
+- Wants important interactive elements (grips/handles, the rope) to be visually distinct and easy to identify — e.g. coloring the handles and rope a strong, contrasting color. Confidence: 0.6
+- Prefers the player's line of sight to the cart kept unobstructed: scenery that blocks the view of the cart (e.g. rocks on the road) should be cleared away even when it also removes a gameplay element. Confidence: 0.6

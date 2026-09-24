@@ -58,7 +58,7 @@ namespace Reins
         public int ExpectedLaneHand => expectedHand == Handedness.Left ? -1 : 1;
         public Transform GripTransform => transform;
         public Vector3 RestLocalPosition => restLocalPosition;
-        public bool IsHeldByExpectedHand => IsHeld && _holdingHand == expectedHand;
+        public bool IsHeldByExpectedHand => IsHeld && (!requireExpectedHand || _holdingHand == expectedHand);
         public int GrabPointCount
         {
             get

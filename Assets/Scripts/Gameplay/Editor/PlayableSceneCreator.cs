@@ -592,7 +592,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             HandGrabInteractable grabPoint = handle.GetComponentInChildren<HandGrabInteractable>(true);
             ReinHandle rein = handle.AddComponent<ReinHandle>();
             SetInt(rein, "expectedHand", handedness);
-            SetBool(rein, "requireExpectedHand", true);
+            SetBool(rein, "requireExpectedHand", false);
             SetVector3(rein, "restLocalPosition", restLocalPosition);
             SetObjectArray(rein, "grabPoints", grabPoint != null
                 ? new[] { grabPoint }
@@ -905,7 +905,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             var reinProperties = new SerializedObject(rein);
             reinProperties.Update();
             SetSerializedInt(reinProperties, "expectedHand", (int)expectedHand);
-            SetSerializedBool(reinProperties, "requireExpectedHand", true);
+            SetSerializedBool(reinProperties, "requireExpectedHand", false);
             SerializedProperty legacyZone = reinProperties.FindProperty("interactable");
             if (legacyZone != null)
             {

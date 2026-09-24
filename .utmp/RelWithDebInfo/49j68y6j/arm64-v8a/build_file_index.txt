@@ -1,0 +1,2 @@
+C:\Users\fhuaquisto\Dev\unsa\interaccion-humano-computador\japanese-demon-hunter\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+C:\Users\fhuaquisto\Dev\unsa\interaccion-humano-computador\japanese-demon-hunter\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt

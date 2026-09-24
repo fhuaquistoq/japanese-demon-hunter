@@ -13,6 +13,8 @@ namespace Reins
         [SerializeField] private Transform vehicleRoot;
         [SerializeField, Min(0.1f)] private float stoneLaneWidth = 1.15f;
         [SerializeField, Min(0.1f)] private float stoneDepth = 0.65f;
+        [Tooltip("Las rocas del camino tapan la vista del jugador sobre la carreta; apagado deja el camino limpio.")]
+        [SerializeField] private bool buildRoadRocks;
 
         [Header("Curvas")]
         [SerializeField, Range(0f, 2f)] private float curvatureScale = 1f;
@@ -378,6 +380,11 @@ namespace Reins
 
         private void BuildStones(Tile tile, int index)
         {
+            if (!buildRoadRocks)
+            {
+                return;
+            }
+
             for (var lane = -1; lane <= 1; lane++)
             {
                 GameObject stone;
@@ -435,9 +442,9 @@ namespace Reins
             }
         }
 
-        private static void ConfigureObstacleGroup(Tile tile, int groupIndex)
+        private void ConfigureObstacleGroup(Tile tile, int groupIndex)
         {
-            tile.blockedMask = groupIndex < 2 || RoadPathModel.IsForkChunk(groupIndex)
+            tile.blockedMask = !buildRoadRocks || groupIndex < 2 || RoadPathModel.IsForkChunk(groupIndex)
                 ? 0 : ObstacleSchedule.BlockedLaneMask(groupIndex);
             for (var laneIndex = 0; laneIndex < 3; laneIndex++)
             {

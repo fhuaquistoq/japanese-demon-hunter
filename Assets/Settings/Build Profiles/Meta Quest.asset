@@ -225,7 +225,7 @@ MonoBehaviour:
     - line: '|     iPhone: 0'
     - line: '|     tvOS: 0'
     - line: '|   overrideDefaultApplicationIdentifier: 1'
-    - line: '|   AndroidBundleVersionCode: 4'
+    - line: '|   AndroidBundleVersionCode: 8'
     - line: '|   AndroidMinSdkVersion: 32'
     - line: '|   AndroidTargetSdkVersion: 34'
     - line: '|   AndroidPreferredInstallLocation: 0'
@@ -969,10 +969,10 @@ MonoBehaviour:
         m_AdaptivePerformanceEnabled: 0
         m_BuildSubtarget: 0
         m_BuildSystem: 1
-        m_ExportAsGoogleAndroidProject: 1
+        m_ExportAsGoogleAndroidProject: 0
         m_DebugSymbolLevel: 1
         m_DebugSymbolFormat: 5
-        m_CurrentDeploymentTargetId: 1WMHH831AR1106
+        m_CurrentDeploymentTargetId: __builtin__target_default
         m_BuildType: 2
         m_LinkTimeOptimization: 0
         m_BuildAppBundle: 0

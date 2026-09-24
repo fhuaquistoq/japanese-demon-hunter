@@ -1,0 +1,1 @@
+C:\Users\fhuaquisto\Dev\unsa\interaccion-humano-computador\japanese-demon-hunter\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\build\intermediates\cxx\RelWithDebInfo\49j68y6j\obj\arm64-v8a

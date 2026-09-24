@@ -5432,7 +5432,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Reins::Reins.ReinHandle
   expectedHand: 0
-  requireExpectedHand: 1
+  requireExpectedHand: 0
   restLocalPosition: {x: -0.34, y: 0.85, z: -0.18}
   grabPoints:
   - {fileID: 1704540296}
@@ -6187,8 +6187,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Reins::Reins.ClosedReinLoop
   vehicleRoot: {fileID: 613630554}
   leftHorseHead: {fileID: 1657839828}
-  leftGrip: {fileID: 1211438637}
-  rightGrip: {fileID: 1457610168}
+  leftGrip: {fileID: 1704540295}
+  rightGrip: {fileID: 600054852}
   rightHorseHead: {fileID: 107201699}
   rope: {fileID: 1303877263}
   slack: 1.18
@@ -6996,7 +6996,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Reins::Reins.ReinHandle
   expectedHand: 1
-  requireExpectedHand: 1
+  requireExpectedHand: 0
   restLocalPosition: {x: 0.34, y: 0.85, z: -0.18}
   grabPoints:
   - {fileID: 600054853}
