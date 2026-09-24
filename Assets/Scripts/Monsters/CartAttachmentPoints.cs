@@ -20,9 +20,22 @@ namespace JapaneseDemonHunter.Monsters
             Vector3 worldPosition,
             out MonsterAttachmentPoint selected)
         {
+            return TryReserveClosest(monster, kind, worldPosition, null, Vector3.zero, out selected);
+        }
+
+        public bool TryReserveClosest(
+            MonsterAttachment monster,
+            MonsterAttachmentKind kind,
+            Vector3 worldPosition,
+            Transform cart,
+            Vector3 rearDirection,
+            out MonsterAttachmentPoint selected)
+        {
             selected = null;
             foreach (MonsterAttachmentPoint candidate in points
-                         .Where(point => point != null && point.HasCapacity && point.Accepts(kind))
+                         .Where(point => point != null && point.HasCapacity && point.Accepts(kind) &&
+                                         (cart == null || Vector3.Dot(point.transform.position - cart.position,
+                                             rearDirection.sqrMagnitude > 0.1f ? rearDirection : cart.forward) > 0.5f))
                          .OrderBy(point => (point.transform.position - worldPosition).sqrMagnitude))
             {
                 if (candidate.TryReserve(monster))

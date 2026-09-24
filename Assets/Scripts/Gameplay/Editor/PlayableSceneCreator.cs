@@ -39,6 +39,7 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const string RockModelPath = "Assets/Art/Monsters/Rock/Resource_Rock_2.fbx";
         private const string AccelerateClipPath = "Assets/Art/Audio/latigo-avanza.mp3";
         private const string BrakeClipPath = "Assets/Art/Audio/latigo-frena.mp3";
+        private const string LaneClipPath = "Assets/Art/Audio/jalar latigo para girar.mp3";
         private const string DefaultVolumeProfilePath = "Assets/Settings/DefaultVolumeProfile.asset";
 
         private static readonly string[] TreeModelPaths =
@@ -58,8 +59,8 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const float KnifeTargetLength = 0.85f;
         private const float PunchDamage = 5f;
         private const float KnifeDamage = 12f;
-        private const float SecondsBeforeFirstMonster = 25f;
-        private const float MonsterSpawnInterval = 7f;
+        private const float SecondsBeforeFirstMonster = 38f;
+        private const float MonsterSpawnInterval = 11f;
 
         // The rope hangs down to the carriage deck instead of floating at chest height.
         private static readonly Vector3 LeftReinRest = new Vector3(-0.34f, 0.85f, -0.18f);
@@ -181,6 +182,7 @@ namespace JapaneseDemonHunter.GameplayEditor
                 vehicleRoot.transform, headAnchor, hunterAttackPoint, candleLamps, rearAnchor);
             GiantZombieSpawner giantSpawner = giantSpawnerObject.GetComponent<GiantZombieSpawner>();
             MonsterSpawner spawner = giantSpawnerObject.GetComponent<MonsterSpawner>();
+            WireSoundscape(vehicleRoot, motor, spawner, giantSpawner);
 
             GameObject kingdom = BuildKingdom(road, kingdomMaterial, kingdomRoofMaterial, lampMaterial, out Light[] kingdomLights);
             GameObject victoryBanner = BuildVictoryBanner(kingdom.transform, lampMaterial);
@@ -448,6 +450,16 @@ namespace JapaneseDemonHunter.GameplayEditor
                 0f - bounds.min.y,
                 parent.position.z - bounds.center.z);
 
+            // Keep the hind legs clear of the carriage floor even at the longest gallop stride.
+            Transform floor = FindChild(carriage, "CarriageFloor");
+            if (floor != null && TryGetRendererBounds(floor.gameObject, out Bounds floorBounds) &&
+                TryGetRendererBounds(instance, out bounds))
+            {
+                const float gallopClearance = 0.85f;
+                float overlap = bounds.max.z - (floorBounds.min.z - gallopClearance);
+                if (overlap > 0f) instance.transform.position += Vector3.back * overlap;
+            }
+
             HorseLocomotionDriver driver = instance.AddComponent<HorseLocomotionDriver>();
             driver.Configure(speedSource, instance.transform, 0.15f, 3.2f, 2.4f);
             return CreateHeadAnchor(instance, parent);
@@ -674,6 +686,156 @@ namespace JapaneseDemonHunter.GameplayEditor
             WireObject(motor, "gestureAudioSource", source);
             WireObject(motor, "accelerateClip", AssetDatabase.LoadAssetAtPath<AudioClip>(AccelerateClipPath));
             WireObject(motor, "brakeClip", AssetDatabase.LoadAssetAtPath<AudioClip>(BrakeClipPath));
+            WireObject(motor, "laneClip", AssetDatabase.LoadAssetAtPath<AudioClip>(LaneClipPath));
+        }
+
+        /// <summary>Applies the new atmosphere to the existing scene without regenerating it.</summary>
+        [MenuItem("Tools/Game/Upgrade Playable Scene Atmosphere")]
+        public static void UpgradePlayableSceneAtmosphere()
+        {
+            if (!File.Exists(ScenePath))
+            {
+                Debug.LogWarning($"Playable scene not found: {ScenePath}");
+                return;
+            }
+
+            if (SceneManager.GetActiveScene().path != ScenePath)
+            {
+                if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            }
+
+            ForestRoad road = Object.FindAnyObjectByType<ForestRoad>();
+            if (road != null)
+            {
+                SetFloatIfMissing(road, "heightAmplitude", 0.55f);
+                SetFloatIfMissing(road, "heightWavelength", 90f);
+                SetFloatIfMissing(road, "forkDivergence", 6f);
+                SetIntIfMissing(road, "forestRows", 3);
+                SetIntIfMissing(road, "treesPerRow", 5);
+            }
+
+            CarriageMotor motor = Object.FindAnyObjectByType<CarriageMotor>();
+            MonsterSpawner spawner = Object.FindAnyObjectByType<MonsterSpawner>();
+            GiantZombieSpawner giant = Object.FindAnyObjectByType<GiantZombieSpawner>();
+            if (spawner != null && Mathf.Approximately(spawner.InitialSpawnDelay, 25f) &&
+                Mathf.Approximately(spawner.SpawnInterval, 7f))
+            {
+                Undo.RecordObject(spawner, "Delay monster spawns");
+                spawner.ConfigureTiming(false, SecondsBeforeFirstMonster, MonsterSpawnInterval);
+            }
+
+            if (giant != null) SetFloatIfMissing(giant, "giantChaseSpeed", 2.2f);
+            GameObject vehicle = GameObject.Find("VehicleRoot");
+            if (vehicle != null)
+            {
+                MoveHorsesClearOfCarriage();
+                MoveAttachmentPointsBehindCart(vehicle.transform);
+                if (motor != null && spawner != null && giant != null &&
+                    vehicle.GetComponent<GameSoundscape>() == null)
+                {
+                    WireSoundscape(vehicle, motor, spawner, giant);
+                }
+                if (motor != null) SetObjectIfMissing(motor, "laneClip", LoadAudio("jalar latigo para girar.mp3"));
+            }
+
+            if (Mathf.Approximately(RenderSettings.fogEndDistance, 85f))
+                RenderSettings.fogEndDistance = 65f;
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            EditorSceneManager.SaveOpenScenes();
+            Debug.Log("Playable scene atmosphere upgraded in place; existing custom Inspector values were kept.");
+        }
+
+        private static void MoveHorsesClearOfCarriage()
+        {
+            GameObject floor = GameObject.Find("CarriageFloor");
+            if (floor == null || !TryGetRendererBounds(floor, out Bounds floorBounds)) return;
+            foreach (string horseName in new[] { "Horse_Model_Left", "Horse_Model_Right" })
+            {
+                GameObject horse = GameObject.Find(horseName);
+                if (horse == null || !TryGetRendererBounds(horse, out Bounds bounds)) continue;
+                float overlap = bounds.max.z - (floorBounds.min.z - 0.85f);
+                if (overlap <= 0f) continue;
+                Undo.RecordObject(horse.transform, "Advance horse clear of carriage");
+                horse.transform.position += Vector3.back * overlap;
+            }
+        }
+
+        private static void MoveAttachmentPointsBehindCart(Transform vehicle)
+        {
+            GameObject floor = GameObject.Find("CarriageFloor");
+            if (floor == null || !TryGetRendererBounds(floor, out Bounds bounds)) return;
+            float rearZ = vehicle.InverseTransformPoint(bounds.max).z + 0.8f;
+            foreach (string name in new[] { "Attach_RearCenter", "Attach_LeftRear", "Attach_RightRear",
+                                          "Attach_LeftFront", "Attach_RightFront" })
+            {
+                GameObject point = GameObject.Find(name);
+                if (point == null) continue;
+                Vector3 local = vehicle.InverseTransformPoint(point.transform.position);
+                if (local.z < rearZ)
+                {
+                    Undo.RecordObject(point.transform, "Keep monster attachment behind carriage");
+                    local.z = rearZ;
+                    point.transform.position = vehicle.TransformPoint(local);
+                }
+            }
+        }
+
+        private static void SetFloatIfMissing(Object target, string field, float value)
+        {
+            var serialized = new SerializedObject(target);
+            SerializedProperty property = serialized.FindProperty(field);
+            if (property != null && property.floatValue <= 0f)
+            {
+                property.floatValue = value;
+                serialized.ApplyModifiedProperties();
+            }
+        }
+
+        private static void SetIntIfMissing(Object target, string field, int value)
+        {
+            var serialized = new SerializedObject(target);
+            SerializedProperty property = serialized.FindProperty(field);
+            if (property != null && property.intValue <= 0)
+            {
+                property.intValue = value;
+                serialized.ApplyModifiedProperties();
+            }
+        }
+
+        private static void SetObjectIfMissing(Object target, string field, Object value)
+        {
+            var serialized = new SerializedObject(target);
+            SerializedProperty property = serialized.FindProperty(field);
+            if (property != null && property.objectReferenceValue == null && value != null)
+            {
+                property.objectReferenceValue = value;
+                serialized.ApplyModifiedProperties();
+            }
+        }
+
+        private static void WireSoundscape(GameObject vehicleRoot, CarriageMotor motor,
+            MonsterSpawner spawner, GiantZombieSpawner giantSpawner)
+        {
+            GameSoundscape soundscape = vehicleRoot.GetComponent<GameSoundscape>();
+            if (soundscape == null) soundscape = vehicleRoot.AddComponent<GameSoundscape>();
+            WireObject(soundscape, "speedSource", motor);
+            WireObject(soundscape, "monsterSpawner", spawner);
+            WireObject(soundscape, "giantSpawner", giantSpawner);
+            WireObject(soundscape, "gallopClip", LoadAudio("caballo_galope.mp3"));
+            WireObject(soundscape, "horseBreathClip", LoadAudio("caballo_soplido.mp3"));
+            WireObject(soundscape, "horseNeighClip", LoadAudio("caballo_relinche.mp3"));
+            WireObject(soundscape, "zombieVoiceClip", LoadAudio("zombie_sonidos.mp3"));
+            WireObject(soundscape, "zombieDeathClip", LoadAudio("zombie_muerte_Mahaha.mp3"));
+            WireObject(soundscape, "batWingsClip", LoadAudio("Murcielago/murcielago_aleteo.mp3"));
+            WireObject(soundscape, "batDeathClip", LoadAudio("Murcielago/murcielago_muerte.mp3"));
+            WireObject(soundscape, "hitClip", LoadAudio("golpe.mp3"));
+            WireObject(soundscape, "giantFootstepsClip", LoadAudio("pisadas_gigante.mp3"));
+        }
+
+        private static AudioClip LoadAudio(string relativePath)
+        {
+            return AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Art/Audio/" + relativePath);
         }
 
         // ---------------------------------------------------------------- road and ground
@@ -688,6 +850,11 @@ namespace JapaneseDemonHunter.GameplayEditor
             SetFloat(road, "laneWidth", 2.8f);
             SetFloat(road, "curvatureScale", 0.8f);
             SetFloat(road, "turnRadius", 100f);
+            SetFloat(road, "heightAmplitude", 0.55f);
+            SetFloat(road, "heightWavelength", 90f);
+            SetFloat(road, "forkDivergence", 6f);
+            SetInt(road, "forestRows", 3);
+            SetInt(road, "treesPerRow", 5);
             SetInt(road, "totalTiles", TotalRoadTiles);
             WireObject(road, "vehicleRoot", vehicleRoot);
             WireObject(road, "rockPrefab", AssetDatabase.LoadAssetAtPath<GameObject>(RockModelPath));
@@ -976,10 +1143,10 @@ namespace JapaneseDemonHunter.GameplayEditor
                 new Vector3(-1.15f, 1.00f, 1.55f), MonsterAttachmentKind.Ground, 1));
             points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_RightRear",
                 new Vector3(1.15f, 1.00f, 1.55f), MonsterAttachmentKind.Ground, 1));
-            points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_LeftFront",
-                new Vector3(-1.40f, 1.50f, -1.60f), MonsterAttachmentKind.Flying, 1));
-            points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_RightFront",
-                new Vector3(1.40f, 1.50f, -1.60f), MonsterAttachmentKind.Flying, 1));
+            points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_LeftRearFlying",
+                new Vector3(-1.35f, 1.75f, 2.6f), MonsterAttachmentKind.Flying, 1));
+            points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_RightRearFlying",
+                new Vector3(1.35f, 1.75f, 2.6f), MonsterAttachmentKind.Flying, 1));
             return points;
         }
 

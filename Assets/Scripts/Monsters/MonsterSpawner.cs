@@ -28,6 +28,7 @@ namespace JapaneseDemonHunter.Monsters
     {
         [Header("Required references")]
         [SerializeField] private Transform cartTransform;
+        [SerializeField] private Transform rearReachPoint;
         [SerializeField] private Transform hunterTransform;
         [SerializeField] private MonsterTargetRegistry targetRegistry;
         [SerializeField] private CartAttachmentPoints attachmentPoints;
@@ -36,10 +37,10 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField] private List<MonsterSpawnEntry> spawnEntries = new List<MonsterSpawnEntry>();
 
         [Header("Spawn timing")]
-        [SerializeField] private bool spawnOneOfEachOnStart = true;
-        [SerializeField, Min(0.1f)] private float spawnInterval = 5f;
+        [SerializeField] private bool spawnOneOfEachOnStart;
+        [SerializeField, Min(0.1f)] private float spawnInterval = 11f;
         [Tooltip("Seconds before the first spawn when the scene must start empty.")]
-        [SerializeField, Min(0f)] private float initialSpawnDelay = 20f;
+        [SerializeField, Min(0f)] private float initialSpawnDelay = 35f;
         [SerializeField, Min(1)] private int maximumActiveMonsters = 8;
         [SerializeField, Min(1)] private int maximumPlacementAttempts = 12;
 
@@ -55,6 +56,7 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField] private LayerMask groundMask = ~0;
         [SerializeField] private LayerMask obstacleMask = ~0;
         [SerializeField, Min(1f)] private float maximumDespawnDistance = 90f;
+        [SerializeField, Range(5f, 80f)] private float rearSpawnHalfAngle = 48f;
 
         private readonly HashSet<MonsterBase> activeMonsters = new HashSet<MonsterBase>();
         private float nextSpawnTime;
@@ -68,11 +70,13 @@ namespace JapaneseDemonHunter.Monsters
             monster != null && monster.Attachment != null && monster.Attachment.IsAttached);
         public IReadOnlyCollection<MonsterBase> ActiveMonsters => activeMonsters;
         public IReadOnlyList<MonsterSpawnEntry> SpawnEntries => spawnEntries;
+        public event Action<MonsterBase> MonsterSpawned;
         public bool IsConfigured => cartTransform != null && targetRegistry != null &&
                                     spawnEntries.Any(entry => entry != null && entry.prefab != null && entry.weight > 0f);
 
         private void Start()
         {
+            ResolveRearReachPoint();
             Physics.SyncTransforms();
             if (spawnOneOfEachOnStart)
             {
@@ -151,10 +155,12 @@ namespace JapaneseDemonHunter.Monsters
                 targetRegistry = targetRegistry,
                 patrolCenter = cartTransform.position,
                 cartTransform = cartTransform,
+                rearReachPoint = rearReachPoint,
                 attachmentPoints = attachmentPoints,
                 cartLoad = cartLoad,
                 hunterTarget = hunterTarget
             });
+            MonsterSpawned?.Invoke(monster);
             return true;
         }
 
@@ -168,7 +174,7 @@ namespace JapaneseDemonHunter.Monsters
 
             for (int attempt = 0; attempt < maximumPlacementAttempts; attempt++)
             {
-                float angle = UnityEngine.Random.Range(0f, 360f);
+                float angle = UnityEngine.Random.Range(-rearSpawnHalfAngle, rearSpawnHalfAngle);
                 float radius = UnityEngine.Random.Range(minimumRadius, Mathf.Max(minimumRadius, maximumRadius));
                 if (TryValidatePositionAtAngle(movementType, angle, radius, out position))
                 {
@@ -191,7 +197,7 @@ namespace JapaneseDemonHunter.Monsters
             float entryMaximumRadius = entry.maximumRadius > 0f ? entry.maximumRadius : maximumRadius;
             for (int attempt = 0; attempt < maximumPlacementAttempts; attempt++)
             {
-                float angle = UnityEngine.Random.Range(0f, 360f);
+                float angle = UnityEngine.Random.Range(-rearSpawnHalfAngle, rearSpawnHalfAngle);
                 float radius = UnityEngine.Random.Range(entryMinimumRadius, Mathf.Max(entryMinimumRadius, entryMaximumRadius));
                 if (TryValidatePositionAtAngle(entry.movementType, angle, radius, out position,
                         entry.minimumFlyingHeight, entry.maximumFlyingHeight))
@@ -227,7 +233,12 @@ namespace JapaneseDemonHunter.Monsters
             }
 
             float angleRadians = angleDegrees * Mathf.Deg2Rad;
-            Vector3 radialDirection = new Vector3(Mathf.Sin(angleRadians), 0f, Mathf.Cos(angleRadians));
+            ResolveRearReachPoint();
+            Vector3 rearDirection = rearReachPoint != null
+                ? Vector3.ProjectOnPlane(rearReachPoint.position - cartTransform.position, Vector3.up).normalized
+                : cartTransform.forward;
+            Vector3 radialDirection = cartTransform.right * Mathf.Sin(angleRadians) +
+                                      rearDirection * Mathf.Cos(angleRadians);
             Vector3 candidate = cartTransform.position + radialDirection * Mathf.Max(0f, radius);
 
             if (movementType == MonsterMovementType.Flying)
@@ -300,6 +311,13 @@ namespace JapaneseDemonHunter.Monsters
             spawnOneOfEachOnStart = configuredSpawnOneOfEachOnStart;
             initialSpawnDelay = Mathf.Max(0f, configuredInitialDelay);
             spawnInterval = Mathf.Max(0.1f, configuredInterval);
+        }
+
+        private void ResolveRearReachPoint()
+        {
+            if (rearReachPoint != null) return;
+            GiantZombieSpawner giant = FindAnyObjectByType<GiantZombieSpawner>();
+            if (giant != null) rearReachPoint = giant.CartRearReachPoint;
         }
 
         private MonsterSpawnEntry SelectWeightedEntry()

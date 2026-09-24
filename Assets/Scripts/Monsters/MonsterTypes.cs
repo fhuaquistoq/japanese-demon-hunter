@@ -53,6 +53,7 @@ namespace JapaneseDemonHunter.Monsters
         public MonsterTargetRegistry targetRegistry;
         public Vector3 patrolCenter;
         public Transform cartTransform;
+        public Transform rearReachPoint;
         public CartAttachmentPoints attachmentPoints;
         public CartMonsterLoad cartLoad;
         public PrototypeHunterMonsterTarget hunterTarget;

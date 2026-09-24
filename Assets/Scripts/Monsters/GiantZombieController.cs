@@ -10,7 +10,8 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField] private Transform cartTransform;
         [SerializeField] private Transform cartRearReachPoint;
         [SerializeField] private MonsterAnimationController animationController;
-        [SerializeField, Min(0f)] private float chaseSpeed = 3.6f;
+        [SerializeField, Min(0f)] private float chaseSpeed = 2.2f;
+        [SerializeField, Min(1f)] private float revealDistance = 18f;
         [SerializeField, Min(0.1f)] private float catchRange = 1.8f;
         [SerializeField, Min(0.1f)] private float rotationSharpness = 6f;
         [SerializeField, Min(0.1f)] private float groundProbeHeight = 4f;
@@ -24,10 +25,19 @@ namespace JapaneseDemonHunter.Monsters
 
         private bool chasing;
         private bool caughtNotificationSent;
+        private Renderer[] renderers;
+        private Animator[] animators;
+        private bool visualsVisible;
 
         public bool IsChasing => chasing;
+        public bool IsVisible => visualsVisible;
         public bool HasCaughtCart => caughtNotificationSent;
         public float ChaseSpeed => chaseSpeed;
+
+        public void SetChaseSpeed(float speed)
+        {
+            chaseSpeed = Mathf.Max(0f, speed);
+        }
         public Transform CartTransform => cartTransform;
         public Transform CartRearReachPoint => cartRearReachPoint;
         public bool IsConfigured => cartTransform != null && cartRearReachPoint != null;
@@ -48,8 +58,10 @@ namespace JapaneseDemonHunter.Monsters
             cartRearReachPoint = configuredRearPoint;
             caughtNotificationSent = false;
             chasing = cartTransform != null && cartRearReachPoint != null;
+            renderers = GetComponentsInChildren<Renderer>(true);
+            animators = GetComponentsInChildren<Animator>(true);
+            SetVisuals(false);
             animationController?.PlayLocomotion(locomotionAnimationSpeed);
-            SnapToGround();
         }
 
         public void TickChase(float deltaTime)
@@ -75,6 +87,13 @@ namespace JapaneseDemonHunter.Monsters
                 return;
             }
 
+            float rearDistance = DistanceToRear;
+            if (!visualsVisible && rearDistance <= revealDistance)
+            {
+                SnapToGround();
+                SetVisuals(true);
+            }
+
             Vector3 direction = cartRearReachPoint.position - transform.position;
             direction.y = 0f;
             if (direction.sqrMagnitude < 0.001f)
@@ -83,13 +102,19 @@ namespace JapaneseDemonHunter.Monsters
             }
 
             direction.Normalize();
-            direction = ResolveDirection(direction);
+            if (visualsVisible) direction = ResolveDirection(direction);
             if (direction.sqrMagnitude < 0.001f)
             {
                 return;
             }
 
             Vector3 candidate = transform.position + direction * (chaseSpeed * deltaTime);
+            if (!visualsVisible)
+            {
+                transform.position = candidate;
+                return;
+            }
+
             if (!TryFindGround(candidate, out RaycastHit groundHit))
             {
                 return;
@@ -99,6 +124,19 @@ namespace JapaneseDemonHunter.Monsters
             transform.position = candidate;
             Quaternion desired = Quaternion.LookRotation(direction, Vector3.up);
             transform.rotation = Quaternion.Slerp(transform.rotation, desired, 1f - Mathf.Exp(-rotationSharpness * deltaTime));
+        }
+
+        private void SetVisuals(bool visible)
+        {
+            visualsVisible = visible;
+            if (renderers != null)
+            {
+                foreach (Renderer renderer in renderers) if (renderer != null) renderer.enabled = visible;
+            }
+            if (animators != null)
+            {
+                foreach (Animator animator in animators) if (animator != null) animator.enabled = visible;
+            }
         }
 
         public void Configure(

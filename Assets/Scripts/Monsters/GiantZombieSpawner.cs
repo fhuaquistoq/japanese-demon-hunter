@@ -12,6 +12,7 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField] private Transform cartTransform;
         [SerializeField] private Transform cartRearReachPoint;
         [SerializeField, Min(1f)] private float initialDistance = 22f;
+        [SerializeField, Min(0f)] private float giantChaseSpeed = 2.2f;
         [SerializeField, Min(0.1f)] private float groundProbeHeight = 12f;
         [SerializeField, Min(0.1f)] private float groundProbeDistance = 30f;
         [SerializeField] private LayerMask groundMask = ~0;
@@ -33,6 +34,7 @@ namespace JapaneseDemonHunter.Monsters
         private bool startCaptured;
 
         public GiantZombieController SpawnedGiant => spawnedGiant;
+        public event Action<GiantZombieController> GiantSpawned;
         public bool HasSpawnedGiant => spawnedGiant != null;
         public GameObject GiantPrefab => giantPrefab;
         public Transform CartTransform => cartTransform;
@@ -140,7 +142,10 @@ namespace JapaneseDemonHunter.Monsters
                 return false;
             }
 
-            Vector3 candidate = cartTransform.position - cartTransform.forward * initialDistance;
+            Vector3 rearDirection = Vector3.ProjectOnPlane(
+                cartRearReachPoint.position - cartTransform.position, Vector3.up).normalized;
+            if (rearDirection.sqrMagnitude < 0.1f) rearDirection = cartTransform.forward;
+            Vector3 candidate = cartTransform.position + rearDirection * initialDistance;
             if (!TryFindSpawnGround(candidate, out Vector3 spawnPoint))
             {
                 Debug.LogWarning("Giant zombie spawn skipped because no marked ground was found behind the cart.", this);
@@ -148,7 +153,7 @@ namespace JapaneseDemonHunter.Monsters
                 return false;
             }
 
-            Quaternion facingCart = Quaternion.LookRotation(cartTransform.forward, Vector3.up);
+            Quaternion facingCart = Quaternion.LookRotation(-rearDirection, Vector3.up);
             GameObject instance = Instantiate(
                 giantPrefab,
                 spawnPoint + Vector3.up * groundClearance,
@@ -162,11 +167,9 @@ namespace JapaneseDemonHunter.Monsters
                 return false;
             }
 
+            spawnedGiant.SetChaseSpeed(giantChaseSpeed);
             spawnedGiant.Initialize(cartTransform, cartRearReachPoint);
-            foreach (Renderer renderer in spawnedGiant.GetComponentsInChildren<Renderer>(true))
-            {
-                renderer.enabled = true;
-            }
+            GiantSpawned?.Invoke(spawnedGiant);
             return true;
         }
 
