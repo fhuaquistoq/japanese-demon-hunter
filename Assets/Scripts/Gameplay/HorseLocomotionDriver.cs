@@ -26,6 +26,8 @@ namespace JapaneseDemonHunter.Gameplay
         [SerializeField, Min(0f)] private float neckSwing = 5f;
         [SerializeField, Min(0f)] private float tailSway = 9f;
         [SerializeField, Min(0f)] private float leftRightPhaseOffset = 0.35f;
+        [SerializeField, Min(0.1f)] private float gaitBlendSpeed = 2.5f;
+        [SerializeField, Min(0f)] private float kneeLift = 24f;
 
         private readonly List<Bone> upperLegs = new List<Bone>();
         private readonly List<Bone> lowerLegs = new List<Bone>();
@@ -83,7 +85,8 @@ namespace JapaneseDemonHunter.Gameplay
             }
 
             strideSpeed = ResolveSpeed();
-            gait = Mathf.Clamp01(Mathf.InverseLerp(idleSpeed, fullGallopSpeed, strideSpeed));
+            float targetGait = Mathf.Clamp01(Mathf.InverseLerp(idleSpeed, fullGallopSpeed, strideSpeed));
+            gait = Mathf.MoveTowards(gait, targetGait, gaitBlendSpeed * deltaTime);
 
             // The stride advances with distance travelled, so the gait slows down with the carriage.
             float stridesPerSecond = strideSpeed / strideLength;
@@ -94,18 +97,20 @@ namespace JapaneseDemonHunter.Gameplay
             }
 
             float idlePhase = Time.time * 1.1f;
-            float bob = Mathf.Lerp(idleBob, gallopBob, gait) * Mathf.Sin(gait > 0.05f ? phase : idlePhase * 0.5f);
+            float bob = idleBob * Mathf.Sin(idlePhase * 0.5f) * (1f - gait) +
+                        gallopBob * gait * Mathf.Sin(phase * 2f);
             bodyRoot.localPosition = bodyBasePosition + new Vector3(0f, bob, 0f);
 
-            float legSwing = Mathf.Lerp(idleLegSwing, gallopLegSwing, gait);
-            float lowerSwing = Mathf.Lerp(idleLegSwing * 0.5f, gallopLowerLegSwing, gait);
-            float swingPhase = gait > 0.05f ? phase : idlePhase * 0.35f;
+            float legSwing = Mathf.Lerp(idleLegSwing, gallopLegSwing, gait) * gait;
+            float lowerSwing = Mathf.Lerp(0f, gallopLowerLegSwing, gait);
+            float swingPhase = phase;
 
             for (var i = 0; i < upperLegs.Count; i++)
             {
                 Bone bone = upperLegs[i];
                 float offset = bone.phaseOffset + (bone.isForeLeg ? 0f : Mathf.PI);
-                float angle = legSwing * Mathf.Sin(swingPhase + offset);
+                float cycle = Mathf.Sin(swingPhase + offset);
+                float angle = legSwing * (cycle >= 0f ? cycle : cycle * 0.72f);
                 bone.transform.localRotation = bone.baseRotation * Quaternion.Euler(angle, 0f, 0f);
             }
 
@@ -113,13 +118,15 @@ namespace JapaneseDemonHunter.Gameplay
             {
                 Bone bone = lowerLegs[i];
                 float offset = bone.phaseOffset + (bone.isForeLeg ? 0f : Mathf.PI);
-                float angle = lowerSwing * Mathf.Sin(swingPhase + offset + 0.6f);
+                float cycle = Mathf.Sin(swingPhase + offset + 0.55f);
+                float angle = -lowerSwing * Mathf.Max(0f, cycle) - kneeLift * gait * Mathf.Max(0f, cycle * cycle);
                 bone.transform.localRotation = bone.baseRotation * Quaternion.Euler(angle, 0f, 0f);
             }
 
             if (neck != null)
             {
-                float angle = Mathf.Lerp(1f, neckSwing, gait) * Mathf.Sin(swingPhase * 0.5f);
+                float angle = neckSwing * gait * Mathf.Sin(swingPhase + 0.4f) +
+                              (1f - gait) * Mathf.Sin(idlePhase * 0.4f);
                 neck.transform.localRotation = neck.baseRotation * Quaternion.Euler(angle, 0f, 0f);
             }
 

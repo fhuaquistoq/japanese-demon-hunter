@@ -37,6 +37,11 @@ namespace Reins
         private readonly CarriageStopModel _stopModel = new CarriageStopModel();
         private CartLoadSpeedModel _loadModel;
         private ForestRoad _forestRoad;
+        private RoadPathModel _roadPath;
+        private Vector3 _roadOriginOffset;
+        private float _travelDistance;
+        private int _selectedForkStart = -1;
+        private int _branchChoice;
         private Vector3 _centerlinePosition;
         private float _speed;
         private int _lane;
@@ -71,6 +76,12 @@ namespace Reins
         {
             _forestRoad = FindAnyObjectByType<ForestRoad>();
             _centerlinePosition = transform.position - transform.right * _laneTransition.CurrentX;
+            if (_forestRoad != null)
+            {
+                _roadPath = _forestRoad.CreatePathModel();
+                _roadOriginOffset = _centerlinePosition -
+                    _forestRoad.transform.TransformPoint(_roadPath.GetChunkPosition(0));
+            }
         }
 
         private void Update()
@@ -92,17 +103,37 @@ namespace Reins
             _speed = LoadModel.ClampSpeed(_speed);
             LoadModel.ReportSpeed(_speed);
 
-            if (followRoadCurvature)
+            var previousPosition = transform.position;
+            if (followRoadCurvature && _roadPath != null)
             {
-                FollowRoadCurvature(deltaTime);
+                _travelDistance += _speed * deltaTime;
+                int forkStart = _roadPath.ForkStartAtDistance(_travelDistance);
+                if (forkStart >= 0 && forkStart != _selectedForkStart)
+                {
+                    _selectedForkStart = forkStart;
+                    _branchChoice = _lane != 0 ? _lane : ((forkStart / RoadPathModel.ForkPeriodChunks) % 2 == 0 ? -1 : 1);
+                }
+
+                _roadPath.GetPoseAtDistance(_travelDistance, out var roadPosition, out var heading);
+                float branchOffset = forkStart >= 0
+                    ? _roadPath.BranchOffsetAtDistance(_travelDistance, _branchChoice) : 0f;
+                float branchYaw = forkStart >= 0
+                    ? _roadPath.BranchYawAtDistance(_travelDistance, _branchChoice) : 0f;
+                float yaw = Mathf.MoveTowardsAngle(transform.eulerAngles.y, heading + branchYaw,
+                    maximumYawRate * deltaTime);
+                transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                _centerlinePosition = _forestRoad.transform.TransformPoint(roadPosition) + _roadOriginOffset;
+                transform.position = _centerlinePosition +
+                                     transform.right * (_laneTransition.Step(deltaTime) + branchOffset);
+            }
+            else
+            {
+                if (followRoadCurvature) FollowRoadCurvature(deltaTime);
+                _centerlinePosition -= transform.forward * (_speed * deltaTime);
+                transform.position = _centerlinePosition + transform.right * _laneTransition.Step(deltaTime);
             }
 
-            _centerlinePosition -= transform.forward * (_speed * deltaTime);
-            var laneOffset = _laneTransition.Step(deltaTime);
-            var previousPosition = transform.position;
-            var position = _centerlinePosition + transform.right * laneOffset;
-            transform.position = position;
-            if (_forestRoad != null && _forestRoad.TryStopOnRock(previousPosition, position))
+            if (_forestRoad != null && _forestRoad.TryStopOnRock(previousPosition, transform.position))
             {
                 StopForObstacle();
             }

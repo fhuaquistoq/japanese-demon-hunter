@@ -33,3 +33,6 @@
 - Wants a calm opening that builds tension: no enemies at the very start, with the first spawn only after a delay. Confidence: 0.6
 - Wants the game built on realistic physics: dropped objects fall under gravity, and thrown objects fly with real momentum and keep dealing damage in flight. Confidence: 0.8
 - Wants interaction objects to be grabbable from any point along them, without designated handles/grips (e.g., take the rope anywhere along its length). Confidence: 0.7
+- Prefers out-of-view objects not to be rendered: when an object is outside the visible scene it should only have its position simulated until it becomes visible, then be rendered. Confidence: 0.6
+- Wants a fully enveloping environment: turning the camera in any direction should only ever reveal layered scenery, never empty void/space. Confidence: 0.6
+- Prefers AI-tool configuration (e.g. skills, agent config) scoped inside the project and versionable with the repo — leading to `.codex/skills/` over copying into the global `~/.codex/skills` — and wants such additions left untracked for them to commit. Confidence: 0.6

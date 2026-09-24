@@ -57,7 +57,9 @@ namespace JapaneseDemonHunter.Monsters
             }
 
             return pointRegistry != null &&
-                   pointRegistry.TryReserveClosest(this, attachmentKind, transform.position, out reservedPoint);
+                   pointRegistry.TryReserveClosest(this, attachmentKind, transform.position,
+                       owner != null ? owner.CartTransform : null,
+                       owner != null ? owner.RearDirection : Vector3.zero, out reservedPoint);
         }
 
         public bool CanReachReservedPoint()

@@ -34,6 +34,10 @@ namespace JapaneseDemonHunter.Monsters
         public IMonsterTarget CurrentTarget => targetSelector != null ? targetSelector.CurrentTarget : null;
         public MonsterMovementType MovementType => movement != null ? movement.MovementType : MonsterMovementType.Ground;
         public MonsterAttachment Attachment => attachment;
+        public Transform CartTransform => spawnContext.cartTransform;
+        public Vector3 RearDirection => spawnContext.cartTransform != null && spawnContext.rearReachPoint != null
+            ? Vector3.ProjectOnPlane(spawnContext.rearReachPoint.position - spawnContext.cartTransform.position,
+                Vector3.up).normalized : spawnContext.cartTransform != null ? spawnContext.cartTransform.forward : Vector3.forward;
         public bool UsesCartAttachment => attachment != null;
 
         public event Action<MonsterBase, MonsterState, MonsterState> StateChanged;
@@ -229,7 +233,14 @@ namespace JapaneseDemonHunter.Monsters
 
         private void TickPatrol(float deltaTime)
         {
-            movement.TickPatrol(patrolRadius, deltaTime);
+            if (spawnContext.cartTransform != null)
+            {
+                Transform cart = spawnContext.cartTransform;
+                Vector3 staging = cart.position + RearDirection * Mathf.Max(3f, patrolRadius * 0.5f);
+                if (MovementType == MonsterMovementType.Flying) staging.y += 2f;
+                movement.TickMoveTowards(staging, movement.PatrolSpeed, deltaTime);
+            }
+            else movement.TickPatrol(patrolRadius, deltaTime);
             if (targetSelector.HasAvailableTargetWithin(transform.position, detectionRadius))
             {
                 SetState(MonsterState.SelectTarget);
@@ -354,7 +365,14 @@ namespace JapaneseDemonHunter.Monsters
                 return;
             }
 
-            movement.TickPatrol(patrolRadius, deltaTime);
+            if (spawnContext.cartTransform != null)
+            {
+                Transform cart = spawnContext.cartTransform;
+                Vector3 staging = cart.position + RearDirection * Mathf.Max(3f, patrolRadius * 0.5f);
+                if (MovementType == MonsterMovementType.Flying) staging.y += 2f;
+                movement.TickMoveTowards(staging, movement.PatrolSpeed, deltaTime);
+            }
+            else movement.TickPatrol(patrolRadius, deltaTime);
         }
 
         private void TickChaseAttachment(float deltaTime)

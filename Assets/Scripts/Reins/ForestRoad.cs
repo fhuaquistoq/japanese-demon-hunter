@@ -17,18 +17,23 @@ namespace Reins
         [Header("Curvas")]
         [SerializeField, Range(0f, 2f)] private float curvatureScale = 1f;
         [SerializeField, Min(10f)] private float turnRadius = RoadPathModel.DefaultTurnRadius;
+        [SerializeField, Range(0f, 1f)] private float heightAmplitude = 0.55f;
+        [SerializeField, Min(25f)] private float heightWavelength = 90f;
+        [SerializeField, Range(0f, 10f)] private float forkDivergence = 6f;
 
         [Header("Modelos reales (opcional)")]
         [SerializeField] private GameObject[] treePrefabs;
         [SerializeField] private GameObject rockPrefab;
         [SerializeField, Min(1f)] private float treeHeight = 7f;
+        [SerializeField, Range(1, 4)] private int forestRows = 3;
+        [SerializeField, Range(3, 7)] private int treesPerRow = 5;
+        [SerializeField, Min(1f)] private float forestRowSpacing = 5f;
         [SerializeField, Min(0.05f)] private float rockFootprintPadding = 1f;
 
         [Header("Final del camino (opcional)")]
         [SerializeField, Min(0)] private int totalTiles;
         [SerializeField] private GameObject kingdomPrefab;
 
-        private const int TreesPerSide = 3;
         private const int RecycleBehindChunks = 2;
         private const int MaximumChunks = 4096;
 
@@ -40,11 +45,13 @@ namespace Reins
         private Material _trunkMaterial;
         private Material _leafMaterial;
         private Material _stoneMaterial;
+        private Texture2D _dirtTexture;
 
         private bool _initialized;
         private int _nextChunkIndex;
         private int _cartChunkIndex;
         private GameObject _kingdom;
+        private GameObject _rearForest;
 
         public float TraveledDistance { get; private set; }
         public float LevelDistance => totalTiles > 0 ? totalTiles * tileLength : 0f;
@@ -58,6 +65,8 @@ namespace Reins
             public Transform root;
             public int chunkIndex;
             public readonly Transform[] stones = new Transform[3];
+            public readonly Transform[] branches = new Transform[2];
+            public Transform mainRoad;
             public readonly bool[] consumed = new bool[3];
             public int blockedMask;
 
@@ -143,6 +152,11 @@ namespace Reins
                 Destroy(_kingdom);
                 _kingdom = null;
             }
+            if (_rearForest != null)
+            {
+                Destroy(_rearForest);
+                _rearForest = null;
+            }
 
             DestroyMaterial(_roadMaterial);
             DestroyMaterial(_vergeMaterial);
@@ -150,6 +164,8 @@ namespace Reins
             DestroyMaterial(_trunkMaterial);
             DestroyMaterial(_leafMaterial);
             DestroyMaterial(_stoneMaterial);
+            if (_dirtTexture != null) Destroy(_dirtTexture);
+            _dirtTexture = null;
             _roadMaterial = null;
             _vergeMaterial = null;
             _dividerMaterial = null;
@@ -178,7 +194,10 @@ namespace Reins
             int poolSize = Mathf.Clamp(tileCount, 6, 10);
             _path = CreatePathModel();
 
-            _roadMaterial = CreateMaterial(new Color(0.20f, 0.22f, 0.20f));
+            _roadMaterial = CreateMaterial(new Color(0.43f, 0.34f, 0.24f));
+            _dirtTexture = CreateDirtTexture();
+            _roadMaterial.mainTexture = _dirtTexture;
+            _roadMaterial.mainTextureScale = new Vector2(1.5f, 3f);
             _vergeMaterial = CreateMaterial(new Color(0.16f, 0.34f, 0.12f));
             _dividerMaterial = CreateMaterial(new Color(0.86f, 0.79f, 0.53f));
             _trunkMaterial = CreateMaterial(new Color(0.28f, 0.16f, 0.08f));
@@ -206,8 +225,38 @@ namespace Reins
 
             _nextChunkIndex = poolSize;
             _cartChunkIndex = 0;
+            BuildRearForest();
             BuildKingdom();
             _initialized = true;
+        }
+
+        private void BuildRearForest()
+        {
+            _rearForest = new GameObject("RearForest");
+            _rearForest.transform.SetParent(transform, false);
+            for (int row = 0; row < forestRows; row++)
+            {
+                for (int column = 0; column < 7; column++)
+                {
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        int seed = row * 37 + column * 13 + side + 7;
+                        var tree = new GameObject("RearTree_" + side + "_" + row + "_" + column).transform;
+                        tree.SetParent(_rearForest.transform, false);
+                        tree.localPosition = new Vector3(
+                            side * (roadWidth * 0.5f + 2f + row * forestRowSpacing + seed % 3),
+                            0f, 4f + column * 7.5f + row * 2f);
+                        if (row == 0 && TryCreateTreeVisual(tree, seed)) continue;
+                        float height = 4f + seed % 4 * 0.45f;
+                        CreatePart(tree, "Trunk", PrimitiveType.Cylinder,
+                            new Vector3(0f, height * 0.25f, 0f),
+                            new Vector3(0.22f, height * 0.25f, 0.22f), _trunkMaterial);
+                        CreatePart(tree, "Canopy", PrimitiveType.Sphere,
+                            new Vector3(0f, height * 0.72f, 0f),
+                            new Vector3(1.2f, height * 0.4f, 1.2f), _leafMaterial);
+                    }
+                }
+            }
         }
 
         private void BuildKingdom()
@@ -247,7 +296,7 @@ namespace Reins
         {
             _path.GetChunkPose(chunkIndex, out var position, out var headingDegrees);
             tile.root.position = position;
-            tile.root.rotation = Quaternion.Euler(0f, headingDegrees, 0f);
+            tile.root.rotation = _path.GetChunkRotation(chunkIndex);
             tile.root.localScale = Vector3.one;
 
             if (tile.stones[0] == null)
@@ -255,6 +304,7 @@ namespace Reins
                 BuildTileContent(tile, chunkIndex);
             }
 
+            ConfigureBranches(tile, chunkIndex);
             ConfigureObstacleGroup(tile, chunkIndex);
         }
 
@@ -262,41 +312,44 @@ namespace Reins
         {
             Transform tileRoot = tile.root;
             CreatePart(tileRoot, "Road", PrimitiveType.Cube,
-                new Vector3(0f, -0.06f, 0f), new Vector3(roadWidth, 0.12f, tileLength), _roadMaterial);
+                new Vector3(0f, -0.06f, -tileLength * 0.5f), new Vector3(roadWidth, 0.12f, tileLength + 0.2f), _roadMaterial);
+            tile.mainRoad = tileRoot.Find("Road");
             CreatePart(tileRoot, "GreenVerge_Left", PrimitiveType.Cube,
-                new Vector3(-roadWidth * 0.5f - 0.65f, -0.03f, 0f), new Vector3(1.3f, 0.08f, tileLength), _vergeMaterial);
+                new Vector3(-roadWidth * 0.5f - 0.65f, -0.03f, -tileLength * 0.5f), new Vector3(1.3f, 0.08f, tileLength), _vergeMaterial);
             CreatePart(tileRoot, "GreenVerge_Right", PrimitiveType.Cube,
-                new Vector3(roadWidth * 0.5f + 0.65f, -0.03f, 0f), new Vector3(1.3f, 0.08f, tileLength), _vergeMaterial);
+                new Vector3(roadWidth * 0.5f + 0.65f, -0.03f, -tileLength * 0.5f), new Vector3(1.3f, 0.08f, tileLength), _vergeMaterial);
 
-            for (var divider = -1; divider <= 1; divider += 2)
+            for (int branch = -1; branch <= 1; branch += 2)
             {
-                CreatePart(tileRoot, "LaneDivider_" + divider, PrimitiveType.Cube,
-                    new Vector3(divider * laneWidth * 0.5f, 0.012f, 0f), new Vector3(0.075f, 0.025f, tileLength - 0.2f), _dividerMaterial);
+                CreatePart(tileRoot, "Branch_" + branch, PrimitiveType.Cube,
+                    new Vector3(0f, -0.055f, -tileLength * 0.5f),
+                    new Vector3(roadWidth, 0.11f, tileLength + 0.2f), _roadMaterial);
+                tile.branches[(branch + 1) / 2] = tileRoot.Find("Branch_" + branch);
             }
 
-            for (var tree = 0; tree < TreesPerSide; tree++)
+            for (var row = 0; row < forestRows; row++)
             {
-                var z = -tileLength * 0.5f + (tree + 0.5f) * tileLength / TreesPerSide;
-                var variation = ((index * 17 + tree * 11) % 5) * 0.25f;
-                for (var side = -1; side <= 1; side += 2)
+                for (var tree = 0; tree < treesPerRow; tree++)
                 {
-                    var x = side * (roadWidth * 0.5f + 2f + variation);
-                    var height = 2.8f + ((index * 7 + tree * 3 + side + 12) % 4) * 0.35f;
-                    var treeRoot = new GameObject("Tree_" + side + "_" + tree).transform;
-                    treeRoot.SetParent(tileRoot, false);
-                    treeRoot.localPosition = new Vector3(x, 0f, z);
-
-                    if (TryCreateTreeVisual(treeRoot, index * 31 + tree * 7 + side))
+                    for (var side = -1; side <= 1; side += 2)
                     {
-                        continue;
-                    }
+                        int seed = Mathf.Abs(index * 53 + row * 17 + tree * 11 + side * 3);
+                        float stagger = ((seed % 7) - 3) * 0.26f;
+                        float z = -(tree + 0.5f) * tileLength / treesPerRow + stagger;
+                        float forkClearance = forkDivergence;
+                        float x = side * (roadWidth * 0.5f + 2f + forkClearance +
+                                          row * forestRowSpacing + (seed % 4) * 0.55f);
+                        var treeRoot = new GameObject("Tree_" + side + "_" + row + "_" + tree).transform;
+                        treeRoot.SetParent(tileRoot, false);
+                        treeRoot.localPosition = new Vector3(x, 0f, z);
 
-                    CreatePart(treeRoot, "Trunk", PrimitiveType.Cylinder,
-                        new Vector3(0f, height * 0.25f, 0f), new Vector3(0.22f, height * 0.25f, 0.22f), _trunkMaterial);
-                    CreatePart(treeRoot, "Canopy", PrimitiveType.Sphere,
-                        new Vector3(0f, height * 0.78f, 0f), new Vector3(1.15f + variation * 0.2f, height * 0.38f, 1.15f + variation * 0.2f), _leafMaterial);
-                    CreatePart(treeRoot, "CanopyTop", PrimitiveType.Sphere,
-                        new Vector3(0f, height * 0.92f, 0f), new Vector3(0.8f, 0.8f, 0.8f), _leafMaterial);
+                        if (row == 0 && TryCreateTreeVisual(treeRoot, seed)) continue;
+                        float height = 3.5f + (seed % 4) * 0.55f;
+                        CreatePart(treeRoot, "Trunk", PrimitiveType.Cylinder,
+                            new Vector3(0f, height * 0.25f, 0f), new Vector3(0.22f, height * 0.25f, 0.22f), _trunkMaterial);
+                        CreatePart(treeRoot, "Canopy", PrimitiveType.Sphere,
+                            new Vector3(0f, height * 0.72f, 0f), new Vector3(1.1f, height * 0.40f, 1.1f), _leafMaterial);
+                    }
                 }
             }
 
@@ -363,9 +416,29 @@ namespace Reins
             ConfigureObstacleGroup(tile, index);
         }
 
+        private void ConfigureBranches(Tile tile, int chunkIndex)
+        {
+            bool fork = _path.HasForks && RoadPathModel.IsForkChunk(chunkIndex);
+            if (tile.mainRoad != null) tile.mainRoad.gameObject.SetActive(!fork);
+            float distance = (chunkIndex + 0.5f) * tileLength;
+            for (int side = 0; side < tile.branches.Length; side++)
+            {
+                Transform branch = tile.branches[side];
+                if (branch == null) continue;
+                int sign = side == 0 ? -1 : 1;
+                branch.gameObject.SetActive(fork);
+                if (fork)
+                {
+                    branch.localPosition = new Vector3(
+                        _path.BranchOffsetAtDistance(distance, sign), -0.055f, -tileLength * 0.5f);
+                }
+            }
+        }
+
         private static void ConfigureObstacleGroup(Tile tile, int groupIndex)
         {
-            tile.blockedMask = groupIndex < 2 ? 0 : ObstacleSchedule.BlockedLaneMask(groupIndex);
+            tile.blockedMask = groupIndex < 2 || RoadPathModel.IsForkChunk(groupIndex)
+                ? 0 : ObstacleSchedule.BlockedLaneMask(groupIndex);
             for (var laneIndex = 0; laneIndex < 3; laneIndex++)
             {
                 tile.consumed[laneIndex] = false;
@@ -441,7 +514,8 @@ namespace Reins
             int chunks = totalTiles > 0
                 ? Mathf.Clamp(totalTiles + 1, poolSize + 1, MaximumChunks)
                 : MaximumChunks;
-            return new RoadPathModel(chunks, tileLength, curvatureScale, turnRadius);
+            return new RoadPathModel(chunks, tileLength, curvatureScale, turnRadius,
+                heightAmplitude, heightWavelength, forkDivergence);
         }
 
         public bool TryStopOnRock(Vector3 previousPosition, Vector3 currentPosition)
@@ -573,6 +647,34 @@ namespace Reins
 
             var material = new Material(shader) { color = color };
             return material;
+        }
+
+        private static Texture2D CreateDirtTexture()
+        {
+            const int size = 128;
+            var texture = new Texture2D(size, size, TextureFormat.RGB24, false)
+            {
+                name = "GeneratedDirtRoad",
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear
+            };
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float noise = Mathf.PerlinNoise(x * 0.13f, y * 0.13f) * 0.26f +
+                                  Mathf.PerlinNoise(x * 0.035f, y * 0.035f) * 0.28f;
+                    float tracks = Mathf.Abs(x - size * 0.25f) < 7f ||
+                                   Mathf.Abs(x - size * 0.75f) < 7f ? -0.09f : 0f;
+                    float shade = Mathf.Clamp01(0.45f + noise + tracks);
+                    pixels[y * size + x] = new Color(shade, shade * 0.88f, shade * 0.69f);
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            return texture;
         }
 
         private static void DestroyMaterial(Material material)
