@@ -514,6 +514,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_L5
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -540,17 +544,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 74195889}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &74195891 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 74195889}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &103976827
 GameObject:
   m_ObjectHideFlags: 0
@@ -860,6 +853,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_R1
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -886,17 +883,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 129797551}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &129797553 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 129797551}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &137824490
 GameObject:
   m_ObjectHideFlags: 0
@@ -1261,6 +1247,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RightWhipHandle
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -1591,6 +1581,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_L3
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -1617,17 +1611,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 227903272}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &227903274 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 227903272}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &230875899
 GameObject:
   m_ObjectHideFlags: 0
@@ -2126,6 +2109,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.MonsterSpawner
   cartTransform: {fileID: 613630554}
+  rearReachPoint: {fileID: 0}
   hunterTransform: {fileID: 1802776293}
   targetRegistry: {fileID: 427063529}
   attachmentPoints: {fileID: 427063528}
@@ -2153,6 +2137,7 @@ MonoBehaviour:
     overrideTargetStrategy: 1
     targetStrategy: 3
   spawnOneOfEachOnStart: 0
+  waitForFirstGallop: 1
   spawnInterval: 11
   initialSpawnDelay: 38
   maximumActiveMonsters: 8
@@ -2485,6 +2470,95 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1802776293}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &600054851
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1457610168}
+    m_Modifications:
+    - target: {fileID: 1359751587983640375, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: _throwWhenUnselected
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_Name
+      value: Unified_ReinGrip
+      objectReference: {fileID: 0}
+    - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_UseGravity
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsKinematic
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8867053273662922137, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+--- !u!4 &600054852 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+  m_PrefabInstance: {fileID: 600054851}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &600054853 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+  m_PrefabInstance: {fileID: 600054851}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &604451768
 GameObject:
   m_ObjectHideFlags: 0
@@ -3152,6 +3226,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_L1
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -3178,17 +3256,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 674427089}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &674427091 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 674427089}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1001 &770928012
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3969,6 +4036,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_R4
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -3995,17 +4066,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 887629031}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &887629033 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 887629031}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &891853097
 GameObject:
   m_ObjectHideFlags: 0
@@ -4465,6 +4525,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_R5
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -4491,17 +4555,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 981363176}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &981363178 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 981363176}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &1002341628
 GameObject:
   m_ObjectHideFlags: 0
@@ -5360,7 +5413,8 @@ Transform:
   m_LocalPosition: {x: -0.34, y: 0.85, z: -0.18}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1704540295}
   m_Father: {fileID: 613630554}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1211438638
@@ -5376,17 +5430,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Reins::Reins.ReinHandle
   expectedHand: 0
-  requireExpectedHand: 0
+  requireExpectedHand: 1
   restLocalPosition: {x: -0.34, y: 0.85, z: -0.18}
   grabPoints:
-  - {fileID: 2066954609}
-  - {fileID: 674427091}
-  - {fileID: 1294349169}
-  - {fileID: 227903274}
-  - {fileID: 1848098488}
-  - {fileID: 74195891}
+  - {fileID: 1704540296}
+  interactable: {fileID: 0}
   tether: {fileID: 969405552}
-  horseHead: {fileID: 1657839828}
   fallAcceleration: 9.81
   maximumFallSpeed: 3.5
   liftThreshold: 0.1
@@ -5787,6 +5836,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: LeftWhipHandle
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -6055,6 +6108,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_L2
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -6081,17 +6138,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 1294349167}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1294349169 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 1294349167}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &1303877260
 GameObject:
   m_ObjectHideFlags: 0
@@ -6363,6 +6409,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_R2
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -6389,17 +6439,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 1321503926}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1321503928 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 1321503926}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &1326806090
 GameObject:
   m_ObjectHideFlags: 0
@@ -6955,17 +6994,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Reins::Reins.ReinHandle
   expectedHand: 1
-  requireExpectedHand: 0
+  requireExpectedHand: 1
   restLocalPosition: {x: 0.34, y: 0.85, z: -0.18}
   grabPoints:
-  - {fileID: 1921404581}
-  - {fileID: 129797553}
-  - {fileID: 1321503928}
-  - {fileID: 2116097983}
-  - {fileID: 887629033}
-  - {fileID: 981363178}
+  - {fileID: 600054853}
+  interactable: {fileID: 0}
   tether: {fileID: 1508226864}
-  horseHead: {fileID: 107201699}
   fallAcceleration: 9.81
   maximumFallSpeed: 3.5
   liftThreshold: 0.1
@@ -6989,7 +7023,8 @@ Transform:
   m_LocalPosition: {x: 0.34, y: 0.85, z: -0.18}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 600054852}
   m_Father: {fileID: 613630554}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1498386722
@@ -8067,6 +8102,95 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1677303025}
   m_Mesh: {fileID: 10206, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1001 &1704540294
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1211438637}
+    m_Modifications:
+    - target: {fileID: 1359751587983640375, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: _throwWhenUnselected
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_Name
+      value: Unified_ReinGrip
+      objectReference: {fileID: 0}
+    - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_UseGravity
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsKinematic
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8867053273662922137, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+--- !u!4 &1704540295 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+  m_PrefabInstance: {fileID: 1704540294}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1704540296 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+  m_PrefabInstance: {fileID: 1704540294}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &1708473625
 GameObject:
   m_ObjectHideFlags: 0
@@ -8688,6 +8812,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_L4
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -8714,17 +8842,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 1848098486}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1848098488 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 1848098486}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &1868752034
 GameObject:
   m_ObjectHideFlags: 0
@@ -9056,6 +9173,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_R0
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -9082,17 +9203,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 1921404579}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1921404581 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 1921404579}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &1988540780
 GameObject:
   m_ObjectHideFlags: 0
@@ -9493,6 +9603,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_L0
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -9519,17 +9633,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 2066954607}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &2066954609 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 2066954607}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &2070860515
 GameObject:
   m_ObjectHideFlags: 0
@@ -9823,6 +9926,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: RopeGrab_R3
       objectReference: {fileID: 0}
+    - target: {fileID: 7010552877223865617, guid: 658245a04427ea7479977447eef58b8d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7899118438809945743, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -9849,17 +9956,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
   m_PrefabInstance: {fileID: 2116097981}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &2116097983 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8882181545778629546, guid: 658245a04427ea7479977447eef58b8d, type: 3}
-  m_PrefabInstance: {fileID: 2116097981}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a7676b01585ce43908639a27765dfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.HandGrab.HandGrabInteractable
 --- !u!1 &2121093578
 GameObject:
   m_ObjectHideFlags: 0

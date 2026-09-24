@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using JapaneseDemonHunter.Prototype;
 
 namespace JapaneseDemonHunter.Monsters
 {
@@ -38,6 +39,7 @@ namespace JapaneseDemonHunter.Monsters
 
         [Header("Spawn timing")]
         [SerializeField] private bool spawnOneOfEachOnStart;
+        [SerializeField] private bool waitForFirstGallop = true;
         [SerializeField, Min(0.1f)] private float spawnInterval = 11f;
         [Tooltip("Seconds before the first spawn when the scene must start empty.")]
         [SerializeField, Min(0f)] private float initialSpawnDelay = 35f;
@@ -60,12 +62,19 @@ namespace JapaneseDemonHunter.Monsters
 
         private readonly HashSet<MonsterBase> activeMonsters = new HashSet<MonsterBase>();
         private float nextSpawnTime;
+        private ICartFirstGallopSource firstGallopSource;
+        private bool waitingForFirstGallop;
 
         public int ActiveMonsterCount => activeMonsters.Count;
         public int MaximumActiveMonsters => maximumActiveMonsters;
         public bool SpawnsOneOfEachOnStart => spawnOneOfEachOnStart;
         public float InitialSpawnDelay => initialSpawnDelay;
         public float SpawnInterval => spawnInterval;
+        public bool WaitsForFirstGallop => waitForFirstGallop;
+        public bool IsWaitingForFirstGallop => waitingForFirstGallop;
+        public bool HasFirstGallopSource => firstGallopSource != null ||
+            FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None).Any(component =>
+                component is ICartFirstGallopSource);
         public int AttachedMonsterCount => activeMonsters.Count(monster =>
             monster != null && monster.Attachment != null && monster.Attachment.IsAttached);
         public IReadOnlyCollection<MonsterBase> ActiveMonsters => activeMonsters;
@@ -78,6 +87,34 @@ namespace JapaneseDemonHunter.Monsters
         {
             ResolveRearReachPoint();
             Physics.SyncTransforms();
+            ResolveFirstGallopSource();
+            if (waitForFirstGallop && firstGallopSource != null)
+            {
+                waitingForFirstGallop = true;
+                firstGallopSource.FirstGallop += HandleFirstGallop;
+                return;
+            }
+
+            if (waitForFirstGallop)
+            {
+                waitingForFirstGallop = true;
+                Debug.LogError("No ICartFirstGallopSource was found; monster spawning stays paused until one is connected.", this);
+                return;
+            }
+
+            BeginSpawnSequence();
+        }
+
+        private void OnDestroy()
+        {
+            if (firstGallopSource != null)
+            {
+                firstGallopSource.FirstGallop -= HandleFirstGallop;
+            }
+        }
+
+        private void BeginSpawnSequence()
+        {
             if (spawnOneOfEachOnStart)
             {
                 foreach (MonsterSpawnEntry entry in spawnEntries)
@@ -98,7 +135,7 @@ namespace JapaneseDemonHunter.Monsters
         {
             RemoveStaleReferences();
             RetireDistantMonsters();
-            if (Time.time < nextSpawnTime)
+            if (waitingForFirstGallop || Time.time < nextSpawnTime)
             {
                 return;
             }
@@ -306,11 +343,54 @@ namespace JapaneseDemonHunter.Monsters
         /// Controls when monsters start appearing: a scene can begin empty and let the tension build
         /// before the first spawn.
         /// </summary>
-        public void ConfigureTiming(bool configuredSpawnOneOfEachOnStart, float configuredInitialDelay, float configuredInterval)
+        public void ConfigureTiming(
+            bool configuredSpawnOneOfEachOnStart,
+            float configuredInitialDelay,
+            float configuredInterval,
+            bool configuredWaitForFirstGallop = true)
         {
             spawnOneOfEachOnStart = configuredSpawnOneOfEachOnStart;
             initialSpawnDelay = Mathf.Max(0f, configuredInitialDelay);
             spawnInterval = Mathf.Max(0.1f, configuredInterval);
+            waitForFirstGallop = configuredWaitForFirstGallop;
+        }
+
+        public void ConfigureFirstGallopSource(MonoBehaviour configuredSource)
+        {
+            firstGallopSource = configuredSource as ICartFirstGallopSource;
+        }
+
+        public void ConfigureFirstGallopWait(bool configuredWait)
+        {
+            waitForFirstGallop = configuredWait;
+        }
+
+        private void ResolveFirstGallopSource()
+        {
+            if (firstGallopSource != null)
+            {
+                return;
+            }
+
+            MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+            firstGallopSource = behaviours.OfType<ICartFirstGallopSource>().FirstOrDefault();
+        }
+
+        private void HandleFirstGallop()
+        {
+            if (!waitingForFirstGallop)
+            {
+                return;
+            }
+
+            waitingForFirstGallop = false;
+            if (firstGallopSource != null)
+            {
+                firstGallopSource.FirstGallop -= HandleFirstGallop;
+                firstGallopSource = null;
+            }
+
+            BeginSpawnSequence();
         }
 
         private void ResolveRearReachPoint()

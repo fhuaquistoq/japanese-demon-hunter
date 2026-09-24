@@ -69,13 +69,7 @@ namespace JapaneseDemonHunter.GameplayEditor
         private static readonly Vector3 LeftReinRest = new Vector3(-0.34f, 0.85f, -0.18f);
         private static readonly Vector3 RightReinRest = new Vector3(0.34f, 0.85f, -0.18f);
 
-        // Invisible, overlapping grab volumes laid along each side of the rope.
-        private const int RopeGrabZonesPerRein = 6;
-        private const float RopeGrabZoneRadius = 0.08f;
-        private const float RopeGrabZoneLength = 0.42f;
-
-        // ---------------------------------------------------------------- whip tuning
-        // One handle per hand, hanging from VehicleRoot beside the rider.
+        // ---------------------------------------------------------------- gallop tuning
         private const string LeftWhipName = "LeftWhipHandle";
         private const string RightWhipName = "RightWhipHandle";
         private const string WhipHandleMaterialPath = "Assets/Materials/Prototype/Mat_CarriageWood.mat";
@@ -179,9 +173,9 @@ namespace JapaneseDemonHunter.GameplayEditor
             CreateGround(vehicleRoot.transform);
 
             ReinHandle leftRein = CreateRein(
-                vehicleRoot.transform, "Left_ReinPin", "RopeGrab_L", LeftReinRest, 0, leftHorseHead, ropeMaterial);
+                vehicleRoot.transform, "Left_ReinPin", LeftReinRest, 0);
             ReinHandle rightRein = CreateRein(
-                vehicleRoot.transform, "Right_ReinPin", "RopeGrab_R", RightReinRest, 1, rightHorseHead, ropeMaterial);
+                vehicleRoot.transform, "Right_ReinPin", RightReinRest, 1);
             CreateClosedReinLoop(vehicleRoot.transform, leftRein, rightRein, leftHorseHead, rightHorseHead, ropeMaterial);
             WireObject(motor, "leftRein", leftRein);
             WireObject(motor, "rightRein", rightRein);
@@ -195,7 +189,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             SetFloat(motor, "coastingDeceleration", WhipCoastingDeceleration);
             WireGestureAudio(vehicleRoot.transform, motor);
 
-            CreateWhipHandles(vehicleRoot.transform, motor);
+            DisableDetachedWhipHandles(vehicleRoot.transform);
 
             Camera centerEye = CreateVrRig(vehicleRoot.transform);
             Transform headAnchor = centerEye != null ? centerEye.transform : vehicleRoot.transform;
@@ -557,107 +551,54 @@ namespace JapaneseDemonHunter.GameplayEditor
 
         // ---------------------------------------------------------------- reins
 
-        /// <summary>
-        /// Builds one rein. There is no handle: a bare pin (the point the rope simulation follows)
-        /// plus a row of invisible grab volumes spread along the rope, so the player can take the
-        /// rope anywhere instead of hunting for a grip.
-        /// </summary>
+        /// <summary>Builds one visible, hand-grabbable end grip that also anchors the continuous rein.</summary>
         private static ReinHandle CreateRein(
             Transform vehicleRoot,
             string pinName,
-            string zonePrefix,
             Vector3 restLocalPosition,
-            int handedness,
-            Transform horseHead,
-            Material ropeMaterial)
+            int handedness)
         {
-            Transform pin = CreateChild(vehicleRoot, pinName, restLocalPosition);
-            LineRenderer tether = CreateTether(vehicleRoot, pinName + "_Tether", ropeMaterial);
-            List<HandGrabInteractable> zones = CreateRopeGrabZones(vehicleRoot, zonePrefix, restLocalPosition);
+            GameObject handle = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, restLocalPosition);
+            handle.name = pinName.Replace("Pin", "Handle");
+            handle.transform.localRotation = Quaternion.identity;
 
-            ReinHandle rein = pin.gameObject.AddComponent<ReinHandle>();
+            MeshCollider meshCollider = handle.GetComponent<MeshCollider>();
+            if (meshCollider != null)
+            {
+                meshCollider.enabled = false;
+            }
+
+            CapsuleCollider capsule = handle.GetComponent<CapsuleCollider>();
+            if (capsule != null)
+            {
+                capsule.radius = 0.5f;
+                capsule.height = 2f;
+                capsule.direction = 1;
+                capsule.center = Vector3.zero;
+            }
+
+            Rigidbody body = handle.GetComponent<Rigidbody>();
+            if (body != null)
+            {
+                body.isKinematic = true;
+                body.useGravity = false;
+            }
+
+            Grabbable grabbable = handle.GetComponent<Grabbable>();
+            if (grabbable != null)
+            {
+                SetBool(grabbable, "_throwWhenUnselected", false);
+            }
+
+            HandGrabInteractable grabPoint = handle.GetComponentInChildren<HandGrabInteractable>(true);
+            ReinHandle rein = handle.AddComponent<ReinHandle>();
             SetInt(rein, "expectedHand", handedness);
+            SetBool(rein, "requireExpectedHand", true);
             SetVector3(rein, "restLocalPosition", restLocalPosition);
-            SetObjectArray(rein, "grabPoints", zones.ToArray());
-            WireObject(rein, "tether", tether);
-            WireObject(rein, "horseHead", horseHead);
+            SetObjectArray(rein, "grabPoints", grabPoint != null
+                ? new[] { grabPoint }
+                : new HandGrabInteractable[0]);
             return rein;
-        }
-
-        /// <summary>Overlapping, invisible grab volumes laid along the reachable part of the rope.</summary>
-        private static List<HandGrabInteractable> CreateRopeGrabZones(
-            Transform vehicleRoot, string prefix, Vector3 pinLocalPosition)
-        {
-            var zones = new List<HandGrabInteractable>();
-            float side = Mathf.Sign(pinLocalPosition.x);
-            var start = new Vector3(side * Mathf.Abs(pinLocalPosition.x) * 1.55f, pinLocalPosition.y + 0.32f, pinLocalPosition.z - 1.15f);
-            var end = new Vector3(side * Mathf.Abs(pinLocalPosition.x) * 0.82f, pinLocalPosition.y - 0.05f, pinLocalPosition.z + 0.72f);
-
-            for (var i = 0; i < RopeGrabZonesPerRein; i++)
-            {
-                float t = RopeGrabZonesPerRein == 1 ? 0f : i / (float)(RopeGrabZonesPerRein - 1);
-                Vector3 position = Vector3.Lerp(start, end, t);
-
-                GameObject zone = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, position);
-                zone.name = $"{prefix}{i}";
-                // The rope grip prefab is squashed and visible: normalise it and hide it so the rope
-                // itself is what the player reaches for.
-                zone.transform.localScale = Vector3.one;
-                zone.transform.localRotation = Quaternion.identity;
-                foreach (Renderer renderer in zone.GetComponentsInChildren<Renderer>(true))
-                {
-                    renderer.enabled = false;
-                }
-
-                CapsuleCollider capsule = zone.GetComponent<CapsuleCollider>();
-                if (capsule != null)
-                {
-                    capsule.radius = RopeGrabZoneRadius;
-                    capsule.height = RopeGrabZoneLength;
-                    capsule.direction = 2;
-                    capsule.center = Vector3.zero;
-                }
-
-                MeshCollider hull = zone.GetComponent<MeshCollider>();
-                if (hull != null)
-                {
-                    hull.enabled = false;
-                }
-
-                Rigidbody body = zone.GetComponent<Rigidbody>();
-                if (body != null)
-                {
-                    body.isKinematic = true;
-                    body.useGravity = false;
-                }
-
-                HandGrabInteractable interactable = zone.GetComponentInChildren<HandGrabInteractable>();
-                if (interactable != null)
-                {
-                    zones.Add(interactable);
-                }
-            }
-
-            return zones;
-        }
-
-        private static LineRenderer CreateTether(Transform parent, string name, Material material)
-        {
-            var tetherObject = new GameObject(name);
-            tetherObject.transform.SetParent(parent, false);
-            LineRenderer line = tetherObject.AddComponent<LineRenderer>();
-            line.useWorldSpace = true;
-            line.positionCount = 2;
-            line.widthMultiplier = 0.025f;
-            line.numCapVertices = 4;
-            if (material != null)
-            {
-                line.sharedMaterial = material;
-            }
-
-            line.SetPosition(0, Vector3.zero);
-            line.SetPosition(1, Vector3.forward);
-            return line;
         }
 
         private static void CreateClosedReinLoop(
@@ -747,7 +688,8 @@ namespace JapaneseDemonHunter.GameplayEditor
                 Mathf.Approximately(spawner.SpawnInterval, 7f))
             {
                 Undo.RecordObject(spawner, "Delay monster spawns");
-                spawner.ConfigureTiming(false, SecondsBeforeFirstMonster, MonsterSpawnInterval);
+                spawner.ConfigureFirstGallopSource(motor);
+                spawner.ConfigureTiming(false, SecondsBeforeFirstMonster, MonsterSpawnInterval, true);
             }
 
             if (giant != null) SetFloatIfMissing(giant, "giantChaseSpeed", 2.2f);
@@ -863,19 +805,164 @@ namespace JapaneseDemonHunter.GameplayEditor
             return AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Art/Audio/" + relativePath);
         }
 
-        // ---------------------------------------------------------------- whips
+        // ---------------------------------------------------------------- legacy whip cleanup and rein grips
 
         /// <summary>
-        /// One whip handle per hand, both children of VehicleRoot. A stroke only ever asks
-        /// <see cref="ICartAccelerationRequester"/> for acceleration, so the whips never write the
-        /// carriage speed and the monster load keeps limiting the ceiling above them.
+        /// Detached one-hand whips are legacy. Keep their scene data recoverable, but turn them off
+        /// once the continuous rein loop is present.
         /// </summary>
-        private static void CreateWhipHandles(Transform vehicleRoot, CarriageMotor motor)
+        private static void DisableDetachedWhipHandles(Transform vehicleRoot)
         {
-            AudioClip lashClip = AssetDatabase.LoadAssetAtPath<AudioClip>(AccelerateClipPath);
+            if (vehicleRoot.GetComponentInChildren<ClosedReinLoop>(true) == null)
+            {
+                return;
+            }
 
-            EnsureWhipHandle(vehicleRoot, LeftWhipName, LeftWhipRest, Handedness.Left, Key.Q, motor, lashClip);
-            EnsureWhipHandle(vehicleRoot, RightWhipName, RightWhipRest, Handedness.Right, Key.E, motor, lashClip);
+            // Legacy whips were separate from the reins and allowed one-handed acceleration. Keep
+            // their scene data recoverable, but deactivate them once the unified rein loop exists.
+            foreach (WhipHandle whip in vehicleRoot.GetComponentsInChildren<WhipHandle>(true))
+            {
+                if (whip == null || !whip.gameObject.activeSelf)
+                {
+                    continue;
+                }
+
+                Undo.RecordObject(whip.gameObject, "Disable standalone whip handle");
+                whip.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// Replaces the old detached grab zones with one visible grip at the existing rope pin.
+        /// The old objects stay in the scene inactive so the change can be undone or inspected.
+        /// </summary>
+        private static bool ConfigureUnifiedReinGrip(
+            Transform vehicleRoot,
+            string pinName,
+            Handedness expectedHand)
+        {
+            Transform pin = FindChild(vehicleRoot, pinName);
+            if (pin == null)
+            {
+                Debug.LogWarning($"Could not find {pinName}; that rope endpoint was left unchanged.");
+                return false;
+            }
+
+            ReinHandle rein = pin.GetComponent<ReinHandle>();
+            if (rein == null)
+            {
+                rein = Undo.AddComponent<ReinHandle>(pin.gameObject);
+            }
+
+            const string gripName = "Unified_ReinGrip";
+            Transform gripTransform = pin.Find(gripName);
+            if (gripTransform == null)
+            {
+                GameObject gripObject = InstantiatePrefab(RopeProxyPrefabPath, pin, Vector3.zero);
+                gripObject.name = gripName;
+                gripTransform = gripObject.transform;
+                Undo.RegisterCreatedObjectUndo(gripObject, "Add unified rein grip");
+            }
+
+            GameObject grip = gripTransform.gameObject;
+            MeshCollider meshCollider = grip.GetComponent<MeshCollider>();
+            if (meshCollider != null)
+            {
+                meshCollider.enabled = false;
+            }
+
+            CapsuleCollider capsule = grip.GetComponent<CapsuleCollider>();
+            if (capsule != null)
+            {
+                capsule.radius = 0.5f;
+                capsule.height = 2f;
+                capsule.direction = 1;
+                capsule.center = Vector3.zero;
+            }
+
+            Rigidbody body = grip.GetComponent<Rigidbody>();
+            if (body != null)
+            {
+                body.isKinematic = true;
+                body.useGravity = false;
+            }
+
+            Grabbable grabbable = grip.GetComponent<Grabbable>();
+            if (grabbable != null)
+            {
+                SetBool(grabbable, "_throwWhenUnselected", false);
+            }
+
+            HandGrabInteractable gripInteractable = grip.GetComponentInChildren<HandGrabInteractable>(true);
+            if (gripInteractable == null)
+            {
+                Debug.LogWarning($"{gripName} under {pinName} has no HandGrabInteractable.");
+                return false;
+            }
+
+            DeactivatePreviousReinZones(rein, gripInteractable);
+
+            Undo.RecordObject(rein, "Configure unified rein grip");
+            var reinProperties = new SerializedObject(rein);
+            reinProperties.Update();
+            SetSerializedInt(reinProperties, "expectedHand", (int)expectedHand);
+            SetSerializedBool(reinProperties, "requireExpectedHand", true);
+            SerializedProperty legacyZone = reinProperties.FindProperty("interactable");
+            if (legacyZone != null)
+            {
+                legacyZone.objectReferenceValue = null;
+            }
+
+            SerializedProperty zones = reinProperties.FindProperty("grabPoints");
+            if (zones != null)
+            {
+                zones.arraySize = 1;
+                zones.GetArrayElementAtIndex(0).objectReferenceValue = gripInteractable;
+            }
+
+            reinProperties.ApplyModifiedProperties();
+            return true;
+        }
+
+        private static void DeactivatePreviousReinZones(ReinHandle rein, HandGrabInteractable activeGrip)
+        {
+            var serialized = new SerializedObject(rein);
+            SerializedProperty zones = serialized.FindProperty("grabPoints");
+            if (zones != null)
+            {
+                for (int index = 0; index < zones.arraySize; index++)
+                {
+                    DeactivatePreviousReinZone(
+                        zones.GetArrayElementAtIndex(index).objectReferenceValue as HandGrabInteractable,
+                        activeGrip);
+                }
+            }
+
+            SerializedProperty legacyZone = serialized.FindProperty("interactable");
+            if (legacyZone != null)
+            {
+                DeactivatePreviousReinZone(legacyZone.objectReferenceValue as HandGrabInteractable, activeGrip);
+            }
+        }
+
+        private static void DeactivatePreviousReinZone(
+            HandGrabInteractable previousZone,
+            HandGrabInteractable activeGrip)
+        {
+            if (previousZone == null || previousZone == activeGrip ||
+                previousZone.transform.IsChildOf(activeGrip.transform))
+            {
+                return;
+            }
+
+            GameObject zoneObject = previousZone.gameObject;
+            if (!zoneObject.activeSelf)
+            {
+                return;
+            }
+
+            Undo.RecordObject(zoneObject, "Deactivate detached rein grab zone");
+            zoneObject.SetActive(false);
         }
 
         /// <summary>
@@ -1080,7 +1167,7 @@ namespace JapaneseDemonHunter.GameplayEditor
         }
 
         /// <summary>Adds the handles and the whip speed tuning to the scene that is already open.</summary>
-        [MenuItem("Tools/Game/Apply Whip Setup (current scene)")]
+        [MenuItem("Tools/Game/Use Unified Reins (current scene)")]
         public static void ApplyWhipSetupMenu()
         {
             bool applied = TryApplyWhipSetupToOpenScene(out string report);
@@ -1095,7 +1182,7 @@ namespace JapaneseDemonHunter.GameplayEditor
 
             if (!Application.isBatchMode && !suppressDialogs)
             {
-                EditorUtility.DisplayDialog("Whip setup", report, "OK");
+                EditorUtility.DisplayDialog("Rienda unificada", report, "OK");
             }
         }
 
@@ -1127,8 +1214,7 @@ namespace JapaneseDemonHunter.GameplayEditor
         }
 
         /// <summary>
-        /// Idempotent: creates the two handles if they are missing, reuses them if they are not, and
-        /// re-applies the whip speed tuning of the playable scene.
+        /// Idempotent: connects the continuous rein system and deactivates detached legacy whips.
         /// </summary>
         private static bool TryApplyWhipSetupToOpenScene(out string report)
         {
@@ -1143,14 +1229,31 @@ namespace JapaneseDemonHunter.GameplayEditor
             CarriageMotor motor = Object.FindAnyObjectByType<CarriageMotor>();
             if (vehicleRootObject == null || motor == null)
             {
-                report = $"{ScenePath} has no VehicleRoot with a CarriageMotor, so the whips cannot be wired.";
+                report = $"{ScenePath} has no VehicleRoot with a CarriageMotor.";
                 return false;
             }
 
-            int before = Object.FindObjectsByType<WhipHandle>(FindObjectsInactive.Include).Length;
-            CreateWhipHandles(vehicleRootObject.transform, motor);
+            if (vehicleRootObject.GetComponentInChildren<ClosedReinLoop>(true) == null)
+            {
+                report = $"{ScenePath} has no ClosedReinLoop; the rein endpoints were left unchanged.";
+                return false;
+            }
+
+            bool leftGripReady = ConfigureUnifiedReinGrip(
+                vehicleRootObject.transform, "Left_ReinPin", Handedness.Left);
+            bool rightGripReady = ConfigureUnifiedReinGrip(
+                vehicleRootObject.transform, "Right_ReinPin", Handedness.Right);
+            DisableDetachedWhipHandles(vehicleRootObject.transform);
             SetFloat(motor, "accelerationPerStroke", WhipAccelerationPerStroke);
             SetFloat(motor, "coastingDeceleration", WhipCoastingDeceleration);
+
+            MonsterSpawner spawner = Object.FindAnyObjectByType<MonsterSpawner>();
+            if (spawner != null)
+            {
+                Undo.RecordObject(spawner, "Wait for first rein gallop before spawning monsters");
+                spawner.ConfigureFirstGallopSource(motor);
+                spawner.ConfigureFirstGallopWait(true);
+            }
 
             EditorSceneManager.MarkSceneDirty(scene);
             if (!EditorSceneManager.SaveScene(scene))
@@ -1159,13 +1262,13 @@ namespace JapaneseDemonHunter.GameplayEditor
                 return false;
             }
 
-            int after = Object.FindObjectsByType<WhipHandle>(FindObjectsInactive.Include).Length;
             bool valid = ValidateOpenScene(out string validation);
             report =
-                $"Whip setup applied to {ScenePath}: {before} handle(s) before, {after} after, " +
-                $"accelerationPerStroke = {WhipAccelerationPerStroke}, " +
+                $"Rienda continua configurada en {ScenePath}; mangos izquierdo/derecho: " +
+                $"{leftGripReady}/{rightGripReady}; látigos separados desactivados, " +
+                $"gallop acceleration = {WhipAccelerationPerStroke}, " +
                 $"coastingDeceleration = {WhipCoastingDeceleration}.\n{validation}";
-            return valid;
+            return valid && leftGripReady && rightGripReady;
         }
 
         // ---------------------------------------------------------------- road and ground
@@ -1442,8 +1545,9 @@ namespace JapaneseDemonHunter.GameplayEditor
                 attachmentPoints,
                 cartLoad,
                 hunterTarget);
-            // The ride starts calm: no monster at all until the first delay elapses.
-            spawner.ConfigureTiming(false, SecondsBeforeFirstMonster, MonsterSpawnInterval);
+            // The delay starts only after the first valid two-handed gallop.
+            spawner.ConfigureFirstGallopSource(vehicleRoot.GetComponent<CarriageMotor>());
+            spawner.ConfigureTiming(false, SecondsBeforeFirstMonster, MonsterSpawnInterval, true);
 
             GiantZombieSpawner giantSpawner = systemObject.AddComponent<GiantZombieSpawner>();
             GameObject giantPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(GiantPrefabPath);
@@ -1649,13 +1753,13 @@ namespace JapaneseDemonHunter.GameplayEditor
             ValidateHorses(failures);
 
             ReinHandle[] reins = Object.FindObjectsByType<ReinHandle>();
-            Require(reins.Length == 2, "Two rein pins exist.", failures);
+            Require(reins.Length == 2, "Two visible end grips exist on the continuous rein.", failures);
             foreach (ReinHandle rein in reins)
             {
-                Require(rein.GrabPointCount >= 4,
-                    $"{rein.name} offers several grab points along the rope (found {rein.GrabPointCount}).", failures);
-                Require(rein.GetComponent<Renderer>() == null && rein.GetComponentInChildren<Renderer>(true) == null,
-                    $"{rein.name} has no visible handle: the rope itself is grabbed.", failures);
+                Require(rein.GrabPointCount == 1,
+                    $"{rein.name} is one hand-grabbable end grip (found {rein.GrabPointCount} grab points).", failures);
+                Require(rein.GetComponentInChildren<Renderer>(true) != null,
+                    $"{rein.name} is a visible handle attached to the rope endpoint.", failures);
                 Require(rein.RestLocalPosition.y <= 1.0f,
                     $"{rein.name} hangs down at deck height so it can be lifted and yanked.", failures);
             }
@@ -1691,6 +1795,10 @@ namespace JapaneseDemonHunter.GameplayEditor
                 "The scene starts with no monsters at all.", failures);
             Require(spawner != null && spawner.InitialSpawnDelay > 0f,
                 "The first monster only appears after an initial delay.", failures);
+            Require(spawner != null && spawner.WaitsForFirstGallop,
+                "The first monster timer waits for the first valid gallop.", failures);
+            Require(spawner != null && spawner.HasFirstGallopSource,
+                "The monster timer is connected to the carriage's first-gallop event.", failures);
 
             MonsterTargetRegistry registry = Object.FindAnyObjectByType<MonsterTargetRegistry>();
             Require(registry != null && registry.IsConfigured && registry.Targets.Count >= 1,
@@ -1709,40 +1817,16 @@ namespace JapaneseDemonHunter.GameplayEditor
             }
 
             WhipHandle[] whips = Object.FindObjectsByType<WhipHandle>(FindObjectsInactive.Include);
-            Require(whips.Length == 2, $"Exactly two whip handles exist (found {whips.Length}).", failures);
-            var hasLeftWhip = false;
-            var hasRightWhip = false;
+            bool hasActiveStandaloneWhip = false;
             foreach (WhipHandle whip in whips)
             {
-                if (whip == null)
-                {
-                    continue;
-                }
-
-                if (whip.ExpectedHand == Handedness.Left)
-                {
-                    hasLeftWhip = true;
-                }
-
-                if (whip.ExpectedHand == Handedness.Right)
-                {
-                    hasRightWhip = true;
-                }
-
-                Require(whip.HasRequester,
-                    $"{whip.name} is connected to the cart acceleration contract.", failures);
-                Require(motor != null && whip.AccelerationRequester == motor,
-                    $"{whip.name} requests acceleration from the CarriageMotor.", failures);
-                Require(whip.VelocityReference != null && whip.VelocityReference.name == "VehicleRoot",
-                    $"{whip.name} measures its stroke against VehicleRoot instead of the moving world.", failures);
-                Require(whip.transform.parent != null && whip.transform.parent.name == "VehicleRoot",
-                    $"{whip.name} hangs from VehicleRoot and not from the XR rig.", failures);
+                hasActiveStandaloneWhip |= whip != null && whip.gameObject.activeInHierarchy && whip.enabled;
             }
 
-            Require(hasLeftWhip, "The left whip handle is assigned to the left hand.", failures);
-            Require(hasRightWhip, "The right whip handle is assigned to the right hand.", failures);
+            Require(!hasActiveStandaloneWhip,
+                "Detached single-hand whip handles are inactive; the two rein end grips drive all rein gestures.", failures);
             Require(Mathf.Approximately(motor != null ? motor.SpeedMultiplier : 1f, 1f),
-                "The whips read the load-limited ceiling of the carriage.", failures);
+                "The carriage starts with a neutral monster-load speed multiplier.", failures);
 
             GiantZombieSpawner giantSpawner = Object.FindAnyObjectByType<GiantZombieSpawner>();
             Require(giantSpawner != null && giantSpawner.SpawnWhenSpeedDrops,

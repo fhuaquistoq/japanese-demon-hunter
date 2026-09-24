@@ -6,29 +6,28 @@ using UnityEngine;
 namespace Reins
 {
     /// <summary>
-    /// One rein: the rope pin the player pulls, plus every grab zone along that side of the rope.
-    /// There is no handle: the zones are invisible grab volumes spread along the rope so it can be
-    /// taken at any point. The stroke is measured from the instant the rope is grabbed, which is
-    /// what makes the gesture work no matter where the hands were when the player took hold.
+    /// One end of the shared horse rein loop. The grip follows the tracked wrist from the moment it
+    /// is grabbed, so gesture displacement is independent of the player's height or posture.
     /// </summary>
     public sealed class ReinHandle : MonoBehaviour
     {
         [SerializeField] private Handedness expectedHand;
-        [Tooltip("Leave off so either hand can pull any part of the rope. Turn on to force the expected hand only.")]
-        [SerializeField] private bool requireExpectedHand;
+        [Tooltip("When enabled, only this side's hand can hold this grip.")]
+        [SerializeField] private bool requireExpectedHand = true;
         [Tooltip("Where the pin settles when nobody is holding the rope.")]
         [SerializeField] private Vector3 restLocalPosition;
-        [Tooltip("Every grab volume along this side of the rope. The player may take the rope at any of them.")]
+        [Tooltip("Hand-grabbable handle(s) attached to this end of the shared rope.")]
         [SerializeField] private List<HandGrabInteractable> grabPoints = new List<HandGrabInteractable>();
-        [SerializeField] private LineRenderer tether;
-        [SerializeField] private Transform horseHead;
+        [Tooltip("Legacy single grab point, kept so existing scene data continues to work.")]
+        [SerializeField, HideInInspector] private HandGrabInteractable interactable;
+        [SerializeField, HideInInspector] private LineRenderer tether;
 
         [Header("Caída de la soga")]
         [Tooltip("Downward acceleration once the hand lets go, so the rope drops and rests instead of snapping back.")]
         [SerializeField, Min(0f)] private float fallAcceleration = 9.81f;
         [SerializeField, Min(0f)] private float maximumFallSpeed = 3.5f;
 
-        [Header("Gestos (ajustar aqui)")]
+        [Header("Gestos compartidos (ajustar en la rienda izquierda)")]
         [Tooltip("Vertical displacement needed to consider the rope lifted.")]
         [SerializeField, Min(0f)] private float liftThreshold = 0.10f;
         [Tooltip("Vertical drop, measured from the highest point of the lift, that fires a gallop.")]
@@ -48,8 +47,10 @@ namespace Reins
         [SerializeField] private bool logGrabDiagnostics = true;
 
         private readonly List<GrabZone> _zones = new List<GrabZone>();
-        private ReinGestureStateMachine _gestures;
         private Vector3 _baselineLocalPosition;
+        private Vector3 _wristPositionOffsetLocal;
+        private IHand _heldHand;
+        private Handedness _holdingHand;
         private float _fallSpeed;
         private bool _wasHeld;
         private bool _diagnosticLogged;
@@ -57,6 +58,7 @@ namespace Reins
         public int ExpectedLaneHand => expectedHand == Handedness.Left ? -1 : 1;
         public Transform GripTransform => transform;
         public Vector3 RestLocalPosition => restLocalPosition;
+        public bool IsHeldByExpectedHand => IsHeld && _holdingHand == expectedHand;
         public int GrabPointCount
         {
             get
@@ -70,11 +72,6 @@ namespace Reins
         public bool IsBeingTouched { get; private set; }
         public Vector3 Pull => transform.localPosition - _baselineLocalPosition;
 
-        /// <summary>Built on demand so the component also works when queried outside Play Mode.</summary>
-        private ReinGestureStateMachine Gestures => _gestures ??= new ReinGestureStateMachine(
-            liftThreshold, dropThreshold, brakeThreshold, laneThreshold,
-            rearmRadius, gestureCooldown, liftWindow, minimumDropSpeed);
-
         private sealed class GrabZone
         {
             public HandGrabInteractable interactable;
@@ -84,41 +81,59 @@ namespace Reins
 
         private void Awake()
         {
-            _gestures = new ReinGestureStateMachine(
-                liftThreshold, dropThreshold, brakeThreshold, laneThreshold,
-                rearmRadius, gestureCooldown, liftWindow, minimumDropSpeed);
+            if (tether != null)
+            {
+                // These old per-horse lines duplicated the single continuous ClosedReinLoop.
+                tether.enabled = false;
+            }
+
             EnsureZones();
         }
 
         private void EnsureZones()
         {
-            if (_zones.Count > 0 || grabPoints.Count == 0)
+            if (_zones.Count > 0)
             {
                 return;
             }
 
+            AddZone(interactable);
             foreach (HandGrabInteractable point in grabPoints)
             {
-                if (point == null)
-                {
-                    continue;
-                }
-
-                _zones.Add(new GrabZone
-                {
-                    interactable = point,
-                    transform = point.transform,
-                    homeLocalPosition = point.transform.localPosition
-                });
+                AddZone(point);
             }
         }
 
-        public ReinGesture ReadGesture(float deltaTime)
+        private void AddZone(HandGrabInteractable point)
+        {
+            if (point == null || _zones.Exists(zone => zone.interactable == point))
+            {
+                return;
+            }
+
+            _zones.Add(new GrabZone
+            {
+                interactable = point,
+                transform = point.transform,
+                homeLocalPosition = point.transform.localPosition
+            });
+        }
+
+        public ReinGestureStateMachine CreateGestureStateMachine()
+        {
+            return new ReinGestureStateMachine(
+                liftThreshold, dropThreshold, brakeThreshold, laneThreshold,
+                rearmRadius, gestureCooldown, liftWindow, minimumDropSpeed);
+        }
+
+        /// <summary>Updates the grip anchor from tracked hand input without interpreting a gesture.</summary>
+        public void UpdateGrip(float deltaTime)
         {
             EnsureZones();
             IsHeld = false;
             IsBeingTouched = false;
-            Transform heldBy = null;
+            _heldHand = null;
+            _holdingHand = default;
 
             for (var i = 0; i < _zones.Count; i++)
             {
@@ -135,39 +150,51 @@ namespace Reins
                     if (hand != null && CanDrive(hand))
                     {
                         IsHeld = true;
-                        heldBy = zone.transform;
+                        _heldHand = hand;
+                        _holdingHand = hand.Handedness;
                     }
                 }
             }
 
-            if (IsHeld && heldBy != null)
+            if (IsHeld && _heldHand != null &&
+                _heldHand.GetJointPose(HandJointId.HandWristRoot, out Pose wristPose))
             {
                 if (!_wasHeld)
                 {
-                    // The stroke is measured from the moment the rope is taken, so any grab height works.
                     _baselineLocalPosition = transform.localPosition;
+                    _wristPositionOffsetLocal = transform.localPosition - ToParentSpace(wristPose.position);
                 }
 
-                transform.position = heldBy.position;
+                // Follow tracked wrist translation; the captured offset keeps the grip at its grab point.
+                transform.localPosition = ToParentSpace(wristPose.position) + _wristPositionOffsetLocal;
                 _fallSpeed = 0f;
                 _wasHeld = true;
                 _diagnosticLogged = false;
-                return Gestures.Step(true, transform.localPosition - _baselineLocalPosition, deltaTime);
+                return;
             }
 
-            if (IsBeingTouched)
+            if (IsBeingTouched && _heldHand == null)
             {
                 // Held by an unexpected hand or without valid tracking: keep the rope still, do not drive.
                 _fallSpeed = 0f;
-                _wasHeld = true;
+                _wasHeld = false;
                 LogDiagnosticOnce();
-                return Gestures.Step(false, Vector3.zero, deltaTime);
+                return;
+            }
+
+            if (IsHeld)
+            {
+                // Tracking became invalid while selected. Freeze the grip until valid wrist data returns.
+                IsHeld = false;
+                _fallSpeed = 0f;
+                _wasHeld = false;
+                LogDiagnosticOnce();
+                return;
             }
 
             _wasHeld = false;
             DropTowardsRest(deltaTime);
             ReleaseZones();
-            return Gestures.Step(false, Vector3.zero, deltaTime);
         }
 
         private bool CanDrive(IHand hand)
@@ -176,6 +203,13 @@ namespace Reins
                 ? ReinHandOwnership.CanDrive(
                     expectedHand, hand.Handedness, true, hand.IsConnected, hand.IsTrackedDataValid)
                 : ReinHandOwnership.CanDriveWithEitherHand(true, hand.IsConnected, hand.IsTrackedDataValid);
+        }
+
+        private Vector3 ToParentSpace(Vector3 worldPosition)
+        {
+            return transform.parent != null
+                ? transform.parent.InverseTransformPoint(worldPosition)
+                : worldPosition;
         }
 
         /// <summary>
@@ -225,6 +259,11 @@ namespace Reins
                     continue;
                 }
 
+                if (zone.transform == transform)
+                {
+                    continue;
+                }
+
                 if (zone.transform.localPosition != zone.homeLocalPosition)
                 {
                     zone.transform.localPosition = zone.homeLocalPosition;
@@ -232,15 +271,5 @@ namespace Reins
             }
         }
 
-        private void LateUpdate()
-        {
-            if (tether == null || horseHead == null)
-            {
-                return;
-            }
-
-            tether.SetPosition(0, horseHead.position);
-            tether.SetPosition(1, transform.position);
-        }
     }
 }

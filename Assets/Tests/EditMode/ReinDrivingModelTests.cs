@@ -116,6 +116,47 @@ namespace Reins.Tests
                 machine.Step(true, new Vector3(0f, 0.05f, 0f), 0.1f).Kind);
         }
 
+        [TestCase(0.7f)]
+        [TestCase(1.6f)]
+        public void BilateralGallopWorksFromDifferentGrabHeights(float grabHeight)
+        {
+            var model = new BilateralReinGestureModel(new ReinGestureStateMachine());
+            var leftGrabPosition = new Vector3(-0.3f, grabHeight, 0f);
+            var rightGrabPosition = new Vector3(0.3f, grabHeight, 0f);
+            var lift = new Vector3(0f, 0.2f, 0f);
+
+            model.Step(true, true, leftGrabPosition, rightGrabPosition, 0.016f);
+            Assert.AreEqual(ReinGestureKind.None,
+                model.Step(true, true, leftGrabPosition + lift, rightGrabPosition + lift, 0.016f).Kind);
+            model.Step(true, true, leftGrabPosition + (2f * lift), rightGrabPosition + (2f * lift), 0.016f);
+            Assert.AreEqual(ReinGestureKind.Accelerate,
+                model.Step(true, true, leftGrabPosition, rightGrabPosition, 0.016f).Kind);
+        }
+
+        [Test]
+        public void ReinGesturesRequireBothExpectedHandsToKeepHolding()
+        {
+            var model = new BilateralReinGestureModel(new ReinGestureStateMachine());
+            var lift = new Vector3(0f, 0.2f, 0f);
+
+            Assert.AreEqual(ReinGestureKind.None,
+                model.Step(true, false, lift, Vector3.zero, 0.016f).Kind,
+                "One hand cannot arm a gallop by itself.");
+            Assert.AreEqual(ReinGestureKind.None,
+                model.Step(true, true, lift, Vector3.zero, 0.016f).Kind,
+                "Movement before the second grip is not counted as the beginning of a two-hand gesture.");
+            Assert.AreEqual(ReinGestureKind.None,
+                model.Step(true, true, lift * 2f, lift, 0.016f).Kind,
+                "Both hands are still lifting.");
+            Assert.AreEqual(ReinGestureKind.Accelerate,
+                model.Step(true, true, lift, Vector3.zero, 0.016f).Kind,
+                "Both hands lower quickly while both expected hands keep holding.");
+
+            Assert.AreEqual(ReinGestureKind.None,
+                model.Step(true, false, new Vector3(0f, 0f, 0.3f), Vector3.zero, 0.016f).Kind,
+                "A brake pull is ignored if either hand releases its grip.");
+        }
+
         [Test]
         public void PullingTheRopeBackwardsBrakes()
         {

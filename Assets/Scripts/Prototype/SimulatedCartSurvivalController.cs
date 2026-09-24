@@ -6,7 +6,8 @@ namespace JapaneseDemonHunter.Prototype
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(SimulatedCartMovement))]
-    public sealed class SimulatedCartSurvivalController : MonoBehaviour, ICartSpeedPenaltyReceiver, ICartAccelerationRequester
+    public sealed class SimulatedCartSurvivalController : MonoBehaviour, ICartSpeedPenaltyReceiver,
+        ICartAccelerationRequester, ICartFirstGallopSource
     {
         [SerializeField] private SimulatedCartMovement movement;
         [Header("Provisional speed tuning")]
@@ -21,6 +22,7 @@ namespace JapaneseDemonHunter.Prototype
         private float speedMultiplier = 1f;
         private float commandedSpeed;
         private float accelerationUntil;
+        private bool firstGallopRaised;
 
         public float EffectiveSpeed => movement != null ? movement.EffectiveSpeed : 0f;
         public float SpeedMultiplier => speedMultiplier;
@@ -29,6 +31,7 @@ namespace JapaneseDemonHunter.Prototype
 
         public event Action AccelerationRequested;
         public event Action<float> EffectiveSpeedChanged;
+        public event Action FirstGallop;
 
         private void Awake()
         {
@@ -67,6 +70,11 @@ namespace JapaneseDemonHunter.Prototype
         public void RequestAcceleration()
         {
             accelerationUntil = Mathf.Max(accelerationUntil, Time.time + accelerationRequestDuration);
+            if (!firstGallopRaised)
+            {
+                firstGallopRaised = true;
+                FirstGallop?.Invoke();
+            }
             AccelerationRequested?.Invoke();
         }
 

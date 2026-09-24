@@ -144,6 +144,44 @@ namespace Reins
         }
     }
 
+    /// <summary>Interprets one shared gesture made while both reins are held by their assigned hands.</summary>
+    public sealed class BilateralReinGestureModel
+    {
+        private readonly ReinGestureStateMachine _gestures;
+        private Vector3 _leftPullBaseline;
+        private Vector3 _rightPullBaseline;
+        private bool _wasBilateralGrip;
+
+        public BilateralReinGestureModel(ReinGestureStateMachine gestures)
+        {
+            _gestures = gestures ?? new ReinGestureStateMachine();
+        }
+
+        public ReinGesture Step(
+            bool leftHeldByExpectedHand,
+            bool rightHeldByExpectedHand,
+            Vector3 leftPull,
+            Vector3 rightPull,
+            float deltaTime)
+        {
+            if (!leftHeldByExpectedHand || !rightHeldByExpectedHand)
+            {
+                _wasBilateralGrip = false;
+                return _gestures.Step(false, Vector3.zero, deltaTime);
+            }
+
+            if (!_wasBilateralGrip)
+            {
+                _leftPullBaseline = leftPull;
+                _rightPullBaseline = rightPull;
+                _wasBilateralGrip = true;
+            }
+
+            Vector3 sharedPull = ((leftPull - _leftPullBaseline) + (rightPull - _rightPullBaseline)) * 0.5f;
+            return _gestures.Step(true, sharedPull, deltaTime);
+        }
+    }
+
     public static class ReinHandOwnership
     {
         public static bool CanDrive(

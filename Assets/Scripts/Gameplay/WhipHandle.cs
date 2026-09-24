@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using JapaneseDemonHunter.Prototype;
 using Oculus.Interaction.HandGrab;
 using Oculus.Interaction.Input;
+using Reins;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -106,6 +107,14 @@ namespace JapaneseDemonHunter.Gameplay
 
         private void Awake()
         {
+            if (transform.root.GetComponentInChildren<ClosedReinLoop>(true) != null)
+            {
+                // The continuous reins own gallop, braking, and lane gestures. Keep legacy detached
+                // one-handed whips out of scenes that use the unified reins.
+                gameObject.SetActive(false);
+                return;
+            }
+
             if (interactable == null)
             {
                 interactable = GetComponentInChildren<HandGrabInteractable>();

@@ -1,10 +1,12 @@
+using System;
 using JapaneseDemonHunter.Prototype;
 using UnityEngine;
 
 namespace Reins
 {
     /// <summary>Moves the carriage, horses, reins, and tracking rig together without rotating the rider.</summary>
-    public sealed class CarriageMotor : MonoBehaviour, ICartSpeedPenaltyReceiver, ICartAccelerationRequester
+    public sealed class CarriageMotor : MonoBehaviour, ICartSpeedPenaltyReceiver, ICartAccelerationRequester,
+        ICartFirstGallopSource
     {
         [SerializeField] private ReinHandle leftRein;
         [SerializeField] private ReinHandle rightRein;
@@ -26,7 +28,7 @@ namespace Reins
         [SerializeField, Min(0f)] private float maximumYawRate = 25f;
         [Header("Audio de gestos")]
         [SerializeField] private AudioSource gestureAudioSource;
-        [Tooltip("Played when a lash of the reins is detected (either hand).")]
+        [Tooltip("Played when both hands complete a reins gesture.")]
         [SerializeField] private AudioClip accelerateClip;
         [Tooltip("Played when the rope is pulled back.")]
         [SerializeField] private AudioClip brakeClip;
@@ -35,6 +37,7 @@ namespace Reins
 
         private readonly LaneTransitionModel _laneTransition = new LaneTransitionModel();
         private readonly CarriageStopModel _stopModel = new CarriageStopModel();
+        private BilateralReinGestureModel _reinGestures;
         private CartLoadSpeedModel _loadModel;
         private ForestRoad _forestRoad;
         private RoadPathModel _roadPath;
@@ -45,11 +48,13 @@ namespace Reins
         private Vector3 _centerlinePosition;
         private float _speed;
         private int _lane;
+        private bool _firstGallopRaised;
 
         public float Speed => _speed;
         public int Lane => _lane;
         public ReinGestureKind LastCommand { get; private set; }
         public int DetectedGestureCount { get; private set; }
+        public event Action FirstGallop;
         public bool HasGestureAudio => gestureAudioSource != null &&
                                        accelerateClip != null &&
                                        brakeClip != null;
@@ -70,6 +75,8 @@ namespace Reins
             _speed = Mathf.Clamp(startingSpeed, 0f, maximumSpeed);
             _loadModel.ReportSpeed(_speed);
             _laneTransition.Begin(0f, _lane, laneWidth, laneShiftDuration);
+            _reinGestures = new BilateralReinGestureModel(
+                leftRein != null ? leftRein.CreateGestureStateMachine() : new ReinGestureStateMachine());
         }
 
         private void Start()
@@ -87,13 +94,15 @@ namespace Reins
         private void Update()
         {
             var deltaTime = Time.deltaTime;
-            var leftGesture = leftRein != null
-                ? leftRein.ReadGesture(deltaTime)
-                : new ReinGesture(ReinGestureKind.None);
-            var rightGesture = rightRein != null
-                ? rightRein.ReadGesture(deltaTime)
-                : new ReinGesture(ReinGestureKind.None);
-            Apply(ReinCommandArbitration.Select(leftGesture, rightGesture));
+            leftRein?.UpdateGrip(deltaTime);
+            rightRein?.UpdateGrip(deltaTime);
+            ReinGesture gesture = _reinGestures.Step(
+                leftRein != null && leftRein.IsHeldByExpectedHand,
+                rightRein != null && rightRein.IsHeldByExpectedHand,
+                leftRein != null ? leftRein.Pull : Vector3.zero,
+                rightRein != null ? rightRein.Pull : Vector3.zero,
+                deltaTime);
+            Apply(gesture);
 
             if (!_stopModel.IsStopped)
             {
@@ -167,6 +176,11 @@ namespace Reins
                 case ReinGestureKind.Accelerate:
                     _speed = _stopModel.Accelerate(
                         _speed, accelerationPerStroke, LoadModel.EffectiveMaximumSpeed);
+                    if (!_firstGallopRaised)
+                    {
+                        _firstGallopRaised = true;
+                        FirstGallop?.Invoke();
+                    }
                     break;
                 case ReinGestureKind.Brake:
                     _speed = Mathf.Max(0f, _speed - brakingPerPull);

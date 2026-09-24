@@ -1,3 +1,5 @@
+using System;
+
 namespace JapaneseDemonHunter.Prototype
 {
     /// <summary>Production cart controllers can implement this without referencing monster code.</summary>
@@ -12,5 +14,11 @@ namespace JapaneseDemonHunter.Prototype
     public interface ICartAccelerationRequester
     {
         void RequestAcceleration();
+    }
+
+    /// <summary>Raised once when the player performs the first valid reins gallop.</summary>
+    public interface ICartFirstGallopSource
+    {
+        event Action FirstGallop;
     }
 }
