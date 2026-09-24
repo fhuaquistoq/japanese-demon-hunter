@@ -166,6 +166,20 @@ namespace Reins.Tests
                 machine.Step(true, new Vector3(0f, 0f, 0.2f), 0.016f).Kind);
         }
 
+        [TestCase(0.25f, 0f, ReinGestureKind.LanePull)]
+        [TestCase(0f, 0.25f, ReinGestureKind.Brake)]
+        public void HoldingAPullDoesNotRepeatTheCommand(float sideways, float backwards,
+            ReinGestureKind expected)
+        {
+            var machine = new ReinGestureStateMachine();
+            var pull = new Vector3(sideways, 0f, backwards);
+            Assert.AreEqual(expected, machine.Step(true, pull, 0.016f).Kind);
+            for (var i = 0; i < 10; i++)
+                Assert.AreEqual(ReinGestureKind.None, machine.Step(true, pull, 0.1f).Kind);
+            machine.Step(true, Vector3.zero, 0.016f);
+            Assert.AreEqual(expected, machine.Step(true, pull, 0.016f).Kind);
+        }
+
         [Test]
         public void DroppingTheRopeBackDownRearmsTheNextLash()
         {

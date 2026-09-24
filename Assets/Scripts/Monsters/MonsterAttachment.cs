@@ -126,7 +126,7 @@ namespace JapaneseDemonHunter.Monsters
             attachElapsed = 0f;
             if (reservedPoint != null)
             {
-                if (transform.parent == reservedPoint.transform && originalParent != null)
+                if (transform.parent == reservedPoint.transform)
                 {
                     transform.SetParent(originalParent, true);
                 }

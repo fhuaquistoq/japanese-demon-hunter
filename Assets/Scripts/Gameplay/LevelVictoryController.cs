@@ -20,6 +20,8 @@ namespace JapaneseDemonHunter.Gameplay
         [SerializeField] private GameObject victoryPresentation;
         [SerializeField] private Light[] kingdomLights;
         [SerializeField, Min(1f)] private float kingdomLightMultiplier = 2.5f;
+        [SerializeField, Min(1)] private int playerHitPoints = 5;
+        [SerializeField, Min(0.5f)] private float restartHoldSeconds = 1.5f;
 
         private float[] baseIntensities;
 
@@ -27,6 +29,14 @@ namespace JapaneseDemonHunter.Gameplay
         public bool IsConfigured => road != null && road.LevelDistance > 0f;
 
         public event Action LevelCompleted;
+
+        private void Awake()
+        {
+            // Existing playable scenes gain the run director without rewriting Unity scene YAML.
+            var session = GetComponent<GameSessionController>();
+            if (session == null) session = gameObject.AddComponent<GameSessionController>();
+            session.Configure(playerHitPoints, restartHoldSeconds);
+        }
 
         private void Start()
         {
@@ -65,6 +75,8 @@ namespace JapaneseDemonHunter.Gameplay
             {
                 return;
             }
+            var session = GetComponent<GameSessionController>();
+            if (session != null && session.Result == GameRunResult.Defeat) return;
 
             IsComplete = true;
 
@@ -91,7 +103,9 @@ namespace JapaneseDemonHunter.Gameplay
                 Destroy(giantSpawner.SpawnedGiant.gameObject);
             }
 
-            if (victoryPresentation != null)
+            // Older scenes contain a world-space Canvas banner. Keep that UI hidden;
+            // the session controller presents the result as an object in the world.
+            if (victoryPresentation != null && victoryPresentation.GetComponent<Canvas>() == null)
             {
                 victoryPresentation.SetActive(true);
             }

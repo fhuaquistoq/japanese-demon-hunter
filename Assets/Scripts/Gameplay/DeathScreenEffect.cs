@@ -21,9 +21,14 @@ namespace JapaneseDemonHunter.Gameplay
         [SerializeField, Min(0f)] private float fadeInDuration = 1.2f;
         [SerializeField, Range(0f, 1f)] private float maximumAlpha = 0.85f;
         [SerializeField] private Color defeatColor = new Color(0.30f, 0.01f, 0.01f, 1f);
+        [SerializeField, Range(0f, 0.5f)] private float maximumDangerAlpha = 0.24f;
+        [SerializeField, Range(0f, 0.5f)] private float hitFlashAlpha = 0.28f;
+        [SerializeField, Min(0.1f)] private float hitFlashDuration = 0.65f;
 
         private MaterialPropertyBlock propertyBlock;
         private float alpha;
+        private float dangerAlpha;
+        private float flashRemaining;
         private bool defeated;
 
         public bool IsDefeated => defeated;
@@ -55,13 +60,21 @@ namespace JapaneseDemonHunter.Gameplay
 
             if (!defeated)
             {
+                flashRemaining = Mathf.Max(0f, flashRemaining - Time.unscaledDeltaTime);
+                float flash = hitFlashAlpha * (flashRemaining / Mathf.Max(0.1f, hitFlashDuration));
+                float nextAlpha = Mathf.Min(0.55f, dangerAlpha + flash);
+                if (!Mathf.Approximately(alpha, nextAlpha))
+                {
+                    alpha = nextAlpha;
+                    ApplyAlpha();
+                }
                 return;
             }
 
             float previous = alpha;
             alpha = fadeInDuration <= 0f
                 ? maximumAlpha
-                : Mathf.Min(maximumAlpha, alpha + (maximumAlpha / fadeInDuration) * Time.deltaTime);
+                : Mathf.Min(maximumAlpha, alpha + (maximumAlpha / fadeInDuration) * Time.unscaledDeltaTime);
             if (!Mathf.Approximately(previous, alpha))
             {
                 ApplyAlpha();
@@ -90,7 +103,23 @@ namespace JapaneseDemonHunter.Gameplay
         {
             defeated = false;
             alpha = 0f;
+            dangerAlpha = 0f;
+            flashRemaining = 0f;
             ApplyAlpha();
+        }
+
+        /// <summary>Subtle persistent redness communicates that repeated hits are becoming fatal.</summary>
+        public void SetDanger(float fraction)
+        {
+            if (defeated) return;
+            dangerAlpha = Mathf.Clamp01(fraction) * maximumDangerAlpha;
+        }
+
+        /// <summary>Brief damage pulse, visible without placing an interface in the headset.</summary>
+        public void FlashDamage()
+        {
+            if (defeated) return;
+            flashRemaining = hitFlashDuration;
         }
 
         public void Configure(GiantZombieSpawner configuredSpawner, Renderer configuredOverlay, float duration)
@@ -101,6 +130,8 @@ namespace JapaneseDemonHunter.Gameplay
             fadeInDuration = Mathf.Max(0f, duration);
             defeated = false;
             alpha = 0f;
+            dangerAlpha = 0f;
+            flashRemaining = 0f;
             ApplyAlpha();
             SubscribeToGiant();
         }

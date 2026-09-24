@@ -24,7 +24,7 @@ namespace JapaneseDemonHunter.Monsters
                 return false;
             }
 
-            Debug.Log($"{attacker.name} hit the simulated hunter. Final hunter damage belongs to a later integration phase.", this);
+            Debug.Log($"{attacker.name} hit the hunter.", this);
             SimulatedHit?.Invoke(attacker);
             return true;
         }

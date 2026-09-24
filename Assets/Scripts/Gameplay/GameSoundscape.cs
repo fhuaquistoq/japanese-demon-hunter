@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using JapaneseDemonHunter.Monsters;
 using JapaneseDemonHunter.Prototype;
+using Reins;
 using UnityEngine;
 
 namespace JapaneseDemonHunter.Gameplay
@@ -19,16 +21,27 @@ namespace JapaneseDemonHunter.Gameplay
         [SerializeField] private AudioClip batWingsClip;
         [SerializeField] private AudioClip batDeathClip;
         [SerializeField] private AudioClip hitClip;
+        [SerializeField] private AudioClip attachmentClip;
+        [SerializeField] private AudioClip obstacleClip;
         [SerializeField] private AudioClip giantFootstepsClip;
         [SerializeField, Min(0.1f)] private float fullGallopSpeed = 4.5f;
         [SerializeField, Range(0f, 1f)] private float gallopVolume = 0.35f;
         [SerializeField, Min(1f)] private float horseBreathInterval = 19f;
         [SerializeField, Min(1f)] private float neighInterval = 45f;
+        [Header("Caída física del monstruo derrotado")]
+        [SerializeField, Min(0.1f)] private float defeatedMonsterMass = 12f;
+        [SerializeField, Min(0f)] private float defeatedMonsterKnockback = 4f;
+        [SerializeField, Min(0f)] private float defeatedMonsterLift = 1.5f;
 
         private ICartSpeedPenaltyReceiver speedReceiver;
         private AudioSource gallopSource;
         private AudioSource horseVoiceSource;
         private AudioSource giantSource;
+        private AudioSource impactSource;
+        private CarriageMotor motor;
+        private GameSessionController session;
+        private PrototypeHunterMonsterTarget hunterTarget;
+        private readonly HashSet<MonsterAttachment> observedAttachments = new HashSet<MonsterAttachment>();
         private float nextBreath;
         private float nextNeigh;
 
@@ -37,21 +50,42 @@ namespace JapaneseDemonHunter.Gameplay
             speedReceiver = speedSource as ICartSpeedPenaltyReceiver;
             gallopSource = CreateSource(gameObject, gallopClip, true, 0f, 0.85f);
             horseVoiceSource = CreateSource(gameObject, null, false, 0.3f, 0.9f);
+            impactSource = CreateSource(gameObject, null, false, 0.8f, 0.8f);
             if (gallopClip != null) gallopSource.Play();
             nextBreath = Time.time + horseBreathInterval;
             nextNeigh = Time.time + neighInterval;
-            if (monsterSpawner != null) monsterSpawner.MonsterSpawned += OnMonsterSpawned;
+            if (monsterSpawner != null)
+            {
+                monsterSpawner.MonsterSpawned += OnMonsterSpawned;
+                foreach (MonsterBase existing in monsterSpawner.ActiveMonsters)
+                    OnMonsterSpawned(existing);
+            }
             if (giantSpawner != null) giantSpawner.GiantSpawned += OnGiantSpawned;
+            motor = speedSource as CarriageMotor;
+            session = FindAnyObjectByType<GameSessionController>();
+            if (motor != null) motor.ObstacleHit += OnObstacleHit;
+            hunterTarget = FindAnyObjectByType<PrototypeHunterMonsterTarget>();
+            if (hunterTarget != null) hunterTarget.SimulatedHit += OnHunterHit;
         }
 
         private void OnDestroy()
         {
             if (monsterSpawner != null) monsterSpawner.MonsterSpawned -= OnMonsterSpawned;
             if (giantSpawner != null) giantSpawner.GiantSpawned -= OnGiantSpawned;
+            if (motor != null) motor.ObstacleHit -= OnObstacleHit;
+            if (hunterTarget != null) hunterTarget.SimulatedHit -= OnHunterHit;
+            foreach (MonsterAttachment attachment in observedAttachments)
+                if (attachment != null) attachment.Attached -= OnMonsterAttached;
         }
 
         private void Update()
         {
+            if (session != null && session.Result != GameRunResult.Playing)
+            {
+                if (gallopSource != null) gallopSource.volume = 0f;
+                if (giantSource != null) giantSource.volume = 0f;
+                return;
+            }
             float speed = speedReceiver != null ? speedReceiver.EffectiveSpeed : 0f;
             float gait = Mathf.Clamp01(speed / Mathf.Max(0.1f, fullGallopSpeed));
             if (gallopSource != null)
@@ -83,9 +117,37 @@ namespace JapaneseDemonHunter.Gameplay
             if (monster == null) return;
             bool flying = monster.MovementType == MonsterMovementType.Flying;
             MonsterSoundEmitter emitter = monster.GetComponent<MonsterSoundEmitter>();
-            if (emitter == null) emitter = monster.gameObject.AddComponent<MonsterSoundEmitter>();
-            emitter.Configure(flying ? batWingsClip : zombieVoiceClip,
-                flying ? batDeathClip : zombieDeathClip, hitClip);
+            if (emitter == null)
+            {
+                emitter = monster.gameObject.AddComponent<MonsterSoundEmitter>();
+                emitter.Configure(flying ? batWingsClip : zombieVoiceClip,
+                    flying ? batDeathClip : zombieDeathClip, hitClip);
+            }
+            MonsterDeathPhysics fall = monster.GetComponent<MonsterDeathPhysics>();
+            if (fall == null) fall = monster.gameObject.AddComponent<MonsterDeathPhysics>();
+            fall.Configure(defeatedMonsterMass, defeatedMonsterKnockback, defeatedMonsterLift);
+            if (monster.Attachment != null && observedAttachments.Add(monster.Attachment))
+                monster.Attachment.Attached += OnMonsterAttached;
+        }
+
+        private void OnMonsterAttached(MonsterAttachment attachment)
+        {
+            PlayImpact(attachmentClip != null ? attachmentClip : hitClip);
+        }
+
+        private void OnObstacleHit()
+        {
+            PlayImpact(obstacleClip != null ? obstacleClip : hitClip);
+        }
+
+        private void OnHunterHit(MonsterBase attacker)
+        {
+            PlayImpact(hitClip);
+        }
+
+        private void PlayImpact(AudioClip clip)
+        {
+            if (impactSource != null && clip != null) impactSource.PlayOneShot(clip);
         }
 
         private void OnGiantSpawned(GiantZombieController giant)

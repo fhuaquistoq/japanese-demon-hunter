@@ -52,9 +52,13 @@ namespace Reins
 
         public float Speed => _speed;
         public int Lane => _lane;
+        public ReinHandle LeftRein => leftRein;
+        public ReinHandle RightRein => rightRein;
         public ReinGestureKind LastCommand { get; private set; }
         public int DetectedGestureCount { get; private set; }
         public event Action FirstGallop;
+        public event Action<ReinGestureKind> CommandApplied;
+        public event Action ObstacleHit;
         public bool HasGestureAudio => gestureAudioSource != null &&
                                        accelerateClip != null &&
                                        brakeClip != null;
@@ -169,6 +173,7 @@ namespace Reins
             {
                 DetectedGestureCount++;
                 PlayGestureAudio(gesture.Kind);
+                CommandApplied?.Invoke(gesture.Kind);
             }
 
             switch (gesture.Kind)
@@ -240,6 +245,8 @@ namespace Reins
         {
             _speed = 0f;
             _stopModel.Stop();
+            LoadModel.ReportSpeed(_speed);
+            ObstacleHit?.Invoke();
         }
     }
 }

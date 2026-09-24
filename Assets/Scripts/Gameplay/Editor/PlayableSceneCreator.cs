@@ -14,7 +14,6 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 
 namespace JapaneseDemonHunter.GameplayEditor
 {
@@ -1656,18 +1655,11 @@ namespace JapaneseDemonHunter.GameplayEditor
 
         private static GameObject BuildVictoryBanner(Transform kingdom, Material lampMaterial)
         {
-            var canvasObject = new GameObject("VictoryBanner", typeof(RectTransform), typeof(Canvas));
-            canvasObject.transform.SetParent(kingdom, false);
-            canvasObject.transform.localPosition = new Vector3(0f, 9.0f, -2.5f);
-            canvasObject.transform.localRotation = Quaternion.identity;
-            canvasObject.transform.localScale = Vector3.one * 0.008f;
-
-            Canvas canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.WorldSpace;
-            canvasObject.GetComponent<RectTransform>().sizeDelta = new Vector2(700f, 170f);
-
-            CreatePrimitive(PrimitiveType.Cube, "BannerPlate", canvasObject.transform,
-                new Vector3(0f, 0f, -0.35f), new Vector3(700f, 170f, 6f), lampMaterial);
+            var sign = new GameObject("KingdomArrivalSign");
+            sign.transform.SetParent(kingdom, false);
+            sign.transform.localPosition = new Vector3(0f, 9.0f, -2.5f);
+            CreatePrimitive(PrimitiveType.Cube, "WoodenSign", sign.transform,
+                Vector3.zero, new Vector3(5.6f, 1.36f, 0.12f), lampMaterial);
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (font == null)
@@ -1682,30 +1674,27 @@ namespace JapaneseDemonHunter.GameplayEditor
 
             if (font == null)
             {
-                Debug.LogWarning("No usable font was found: the victory banner keeps its lit plate without text.");
-                canvasObject.SetActive(false);
-                return canvasObject;
+                Debug.LogWarning("No usable font was found: the kingdom sign has no text.");
+                sign.SetActive(false);
+                return sign;
             }
 
-            var labelObject = new GameObject("Label", typeof(RectTransform), typeof(Text));
-            labelObject.transform.SetParent(canvasObject.transform, false);
-            Text label = labelObject.GetComponent<Text>();
+            var labelObject = new GameObject("EngravedArrival", typeof(TextMesh), typeof(MeshRenderer));
+            labelObject.transform.SetParent(sign.transform, false);
+            labelObject.transform.localPosition = new Vector3(0f, 0f, 0.07f);
+            labelObject.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            TextMesh label = labelObject.GetComponent<TextMesh>();
             label.font = font;
             label.fontSize = 96;
-            label.alignment = TextAnchor.MiddleCenter;
+            label.characterSize = 0.006f;
+            label.alignment = TextAlignment.Center;
+            label.anchor = TextAnchor.MiddleCenter;
             label.color = new Color(1f, 0.88f, 0.62f);
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Overflow;
             label.text = "Llegaste al reino\nVICTORIA";
+            labelObject.GetComponent<MeshRenderer>().sharedMaterial = font.material;
 
-            RectTransform rect = labelObject.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-
-            canvasObject.SetActive(false);
-            return canvasObject;
+            sign.SetActive(false);
+            return sign;
         }
 
         private static void CreateDefeatEffect(GiantZombieSpawner giantSpawner, Camera centerEye, Material overlayMaterial)

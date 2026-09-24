@@ -41,6 +41,7 @@ namespace Reins
         private float _previousY;
         private bool _lifted;
         private bool _armed = true;
+        private bool _requiresPlanarReturn;
 
         public ReinGestureStateMachine(
             float liftThreshold = 0.12f,
@@ -76,7 +77,16 @@ namespace Reins
             // The rein becomes ready again once it is back in its neutral zone, or simply lowered
             // back down. Without the height test a fresh lash would be impossible whenever the rope
             // hangs away from its resting point.
-            if (pull.sqrMagnitude <= _rearmRadius * _rearmRadius || pull.y <= _liftThreshold * 0.5f)
+            bool planarNeutral = new Vector2(pull.x, pull.z).sqrMagnitude <=
+                                 _rearmRadius * _rearmRadius;
+            if (_requiresPlanarReturn && planarNeutral)
+            {
+                _requiresPlanarReturn = false;
+                _armed = true;
+            }
+            else if (!_requiresPlanarReturn &&
+                     (pull.sqrMagnitude <= _rearmRadius * _rearmRadius ||
+                      pull.y <= _liftThreshold * 0.5f))
             {
                 _armed = true;
             }
@@ -128,6 +138,7 @@ namespace Reins
         private ReinGesture Fire(ReinGestureKind kind, int direction)
         {
             _armed = false;
+            _requiresPlanarReturn = kind == ReinGestureKind.Brake || kind == ReinGestureKind.LanePull;
             _lifted = false;
             _cooldown = _cooldownSeconds;
             return new ReinGesture(kind, direction);
@@ -141,6 +152,7 @@ namespace Reins
             _previousY = 0f;
             _lifted = false;
             _armed = true;
+            _requiresPlanarReturn = false;
         }
     }
 

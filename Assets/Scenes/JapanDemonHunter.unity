@@ -2909,6 +2909,8 @@ MonoBehaviour:
   batWingsClip: {fileID: 8300000, guid: ab537d10ee5f06a4fa351c982d10a980, type: 3}
   batDeathClip: {fileID: 8300000, guid: 19dc10a84dae87243aad512093b55eb2, type: 3}
   hitClip: {fileID: 8300000, guid: 82dcf2a43d6173f4489b10765d0e43ac, type: 3}
+  attachmentClip: {fileID: 0}
+  obstacleClip: {fileID: 0}
   giantFootstepsClip: {fileID: 8300000, guid: 4fa61ef03c86a3448a0fd7a3914526d3, type: 3}
   fullGallopSpeed: 4.5
   gallopVolume: 0.35
@@ -8622,6 +8624,9 @@ MonoBehaviour:
   fadeInDuration: 1.6
   maximumAlpha: 0.85
   defeatColor: {r: 0.3, g: 0.01, b: 0.01, a: 1}
+  maximumDangerAlpha: 0.24
+  hitFlashAlpha: 0.28
+  hitFlashDuration: 0.65
 --- !u!1 &1827391039
 GameObject:
   m_ObjectHideFlags: 0
