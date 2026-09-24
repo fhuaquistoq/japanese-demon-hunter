@@ -3,12 +3,15 @@ using System.IO;
 using JapaneseDemonHunter.Gameplay;
 using JapaneseDemonHunter.Monsters;
 using JapaneseDemonHunter.Prototype;
+using Oculus.Interaction;
 using Oculus.Interaction.HandGrab;
+using Oculus.Interaction.Input;
 using Oculus.Interaction.OVR.Editor.QuickActions;
 using Reins;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -69,6 +72,25 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const int RopeGrabZonesPerRein = 6;
         private const float RopeGrabZoneRadius = 0.08f;
         private const float RopeGrabZoneLength = 0.42f;
+
+        // ---------------------------------------------------------------- whip tuning
+        // One handle per hand, hanging from VehicleRoot beside the rider.
+        private const string LeftWhipName = "LeftWhipHandle";
+        private const string RightWhipName = "RightWhipHandle";
+        private const string WhipHandleMaterialPath = "Assets/Materials/Prototype/Mat_CarriageWood.mat";
+        private static readonly Vector3 LeftWhipRest = new Vector3(-0.62f, 1.02f, 0.22f);
+        private static readonly Vector3 RightWhipRest = new Vector3(0.62f, 1.02f, 0.22f);
+        private const float WhipHandleLength = 0.36f;
+        private const float WhipHandleRadius = 0.028f;
+        private const float WhipGripRadius = 0.05f;
+        private const float WhipTipDistance = 0.34f;
+        private const float WhipRopeLength = 1.05f;
+        private const int WhipRopeSegments = 5;
+
+        // A stroke adds a little more than before; the coasting bleed is much gentler so the ride
+        // keeps its speed between strokes. Both remain editable in the Inspector.
+        private const float WhipAccelerationPerStroke = 2.0f;
+        private const float WhipCoastingDeceleration = 0.20f;
 
         /// <summary>Set by the command line entry points so dialogs never block an automated run.</summary>
         private static bool suppressDialogs;
@@ -167,10 +189,12 @@ namespace JapaneseDemonHunter.GameplayEditor
             SetBool(motor, "followRoadCurvature", true);
             SetFloat(motor, "maximumSpeed", 5f);
             SetFloat(motor, "startingSpeed", 3.5f);
-            SetFloat(motor, "accelerationPerStroke", 1.6f);
+            SetFloat(motor, "accelerationPerStroke", WhipAccelerationPerStroke);
             SetFloat(motor, "brakingPerPull", 0.9f);
-            SetFloat(motor, "coastingDeceleration", 0.7f);
+            SetFloat(motor, "coastingDeceleration", WhipCoastingDeceleration);
             WireGestureAudio(vehicleRoot.transform, motor);
+
+            CreateWhipHandles(vehicleRoot.transform, motor);
 
             Camera centerEye = CreateVrRig(vehicleRoot.transform);
             Transform headAnchor = centerEye != null ? centerEye.transform : vehicleRoot.transform;
@@ -215,6 +239,7 @@ namespace JapaneseDemonHunter.GameplayEditor
                     "Playable scene ready",
                     "JapanDemonHunter.unity was created and validated.\n\n" +
                     "Activate the Meta XR Simulator (Device = Meta Quest 2), press Play and grab both rein handles.\n" +
+                    "The two whip handles accept one hand each: Q accelerates with the left handle and E with the right.\n" +
                     "Launch the simulator with the XR Simulator app before pressing Play.",
                     "OK");
             }
@@ -674,6 +699,311 @@ namespace JapaneseDemonHunter.GameplayEditor
             WireObject(motor, "gestureAudioSource", source);
             WireObject(motor, "accelerateClip", AssetDatabase.LoadAssetAtPath<AudioClip>(AccelerateClipPath));
             WireObject(motor, "brakeClip", AssetDatabase.LoadAssetAtPath<AudioClip>(BrakeClipPath));
+        }
+
+        // ---------------------------------------------------------------- whips
+
+        /// <summary>
+        /// One whip handle per hand, both children of VehicleRoot. A stroke only ever asks
+        /// <see cref="ICartAccelerationRequester"/> for acceleration, so the whips never write the
+        /// carriage speed and the monster load keeps limiting the ceiling above them.
+        /// </summary>
+        private static void CreateWhipHandles(Transform vehicleRoot, CarriageMotor motor)
+        {
+            AudioClip lashClip = AssetDatabase.LoadAssetAtPath<AudioClip>(AccelerateClipPath);
+
+            EnsureWhipHandle(vehicleRoot, LeftWhipName, LeftWhipRest, Handedness.Left, Key.Q, motor, lashClip);
+            EnsureWhipHandle(vehicleRoot, RightWhipName, RightWhipRest, Handedness.Right, Key.E, motor, lashClip);
+        }
+
+        /// <summary>
+        /// Finds the handle or builds it, so running the tool again never duplicates it. An object
+        /// with the right name but no WhipHandle is left alone with a warning instead of being
+        /// destroyed: manual work is never overwritten.
+        /// </summary>
+        private static WhipHandle EnsureWhipHandle(
+            Transform vehicleRoot,
+            string name,
+            Vector3 restLocalPosition,
+            Handedness hand,
+            Key desktopKey,
+            CarriageMotor motor,
+            AudioClip lashClip)
+        {
+            Transform existing = FindChild(vehicleRoot, name);
+            if (existing != null)
+            {
+                if (!existing.TryGetComponent(out WhipHandle found))
+                {
+                    Debug.LogWarning(
+                        $"{name} already exists without a WhipHandle component, so it is left untouched. " +
+                        "Rename or remove it if you want the tool to build the whip again.");
+                    return null;
+                }
+
+                WireWhipHandle(found, hand, motor, vehicleRoot, desktopKey, lashClip, isNew: false);
+                return found;
+            }
+
+            GameObject instance = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, restLocalPosition);
+            instance.name = name;
+            // The rope grip prefab is squashed and visible: normalise it and hide it, exactly like the
+            // knife and the rope grab zones, so the handle the player sees is what gets grabbed. It is
+            // turned around so the handle points where the rider looks.
+            instance.transform.localScale = Vector3.one;
+            instance.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+
+            foreach (Renderer renderer in instance.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.enabled = false;
+            }
+
+            MeshCollider proxyHull = instance.GetComponent<MeshCollider>();
+            if (proxyHull != null)
+            {
+                proxyHull.enabled = false;
+            }
+
+            CapsuleCollider grip = instance.GetComponent<CapsuleCollider>();
+            if (grip != null)
+            {
+                grip.radius = WhipGripRadius;
+                grip.height = WhipHandleLength;
+                grip.direction = 2;
+                grip.center = new Vector3(0f, 0f, WhipHandleLength * 0.5f);
+            }
+
+            // A released whip must not be thrown off the carriage by the grab physics: WhipHandle
+            // keeps it kinematic and drifts it back to its rest pose.
+            Grabbable grabbable = instance.GetComponent<Grabbable>();
+            if (grabbable != null)
+            {
+                SetBool(grabbable, "_throwWhenUnselected", false);
+            }
+
+            Rigidbody body = instance.GetComponent<Rigidbody>();
+            if (body != null)
+            {
+                body.isKinematic = true;
+                body.useGravity = false;
+            }
+
+            CreateWhipVisual(instance.transform);
+            WhipHandle whip = instance.AddComponent<WhipHandle>();
+            WireWhipHandle(whip, hand, motor, vehicleRoot, desktopKey, lashClip, isNew: true);
+            return whip;
+        }
+
+        /// <summary>
+        /// Wires one handle. When the handle already existed only the missing references are filled,
+        /// so anything tuned by hand in the Inspector survives.
+        /// </summary>
+        private static void WireWhipHandle(
+            WhipHandle whip,
+            Handedness hand,
+            CarriageMotor motor,
+            Transform vehicleRoot,
+            Key desktopKey,
+            AudioClip lashClip,
+            bool isNew)
+        {
+            Transform root = whip.transform;
+            Transform tip = CreateWhipTip(root);
+            LineRenderer rope = CreateWhipRope(root);
+            AudioSource lashSource = CreateWhipAudio(whip.gameObject);
+            HandGrabInteractable interactable = root.GetComponentInChildren<HandGrabInteractable>();
+
+            WireObjectIfNull(whip, "accelerationRequester", motor);
+            WireObjectIfNull(whip, "velocityReference", vehicleRoot);
+            WireObjectIfNull(whip, "tip", tip);
+            WireObjectIfNull(whip, "interactable", interactable);
+            WireObjectIfNull(whip, "rope", rope);
+            WireObjectIfNull(whip, "lashAudioSource", lashSource);
+            WireObjectIfNull(whip, "lashClip", lashClip);
+
+            // The hand each handle belongs to is its identity, so it is always enforced.
+            SetInt(whip, "expectedHand", (int)hand);
+            if (isNew)
+            {
+                SetInt(whip, "desktopKey", (int)desktopKey);
+            }
+        }
+
+        /// <summary>The provisional handle: a plain cylinder, since no whip model exists yet.</summary>
+        private static void CreateWhipVisual(Transform parent)
+        {
+            if (parent.Find("Handle_Visual") != null)
+            {
+                return;
+            }
+
+            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            visual.name = "Handle_Visual";
+            visual.transform.SetParent(parent, false);
+            visual.transform.localPosition = new Vector3(0f, 0f, WhipHandleLength * 0.5f);
+            visual.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            visual.transform.localScale = new Vector3(
+                WhipHandleRadius * 2f, WhipHandleLength * 0.5f, WhipHandleRadius * 2f);
+            Object.DestroyImmediate(visual.GetComponent<Collider>());
+
+            Material handleMaterial = AssetDatabase.LoadAssetAtPath<Material>(WhipHandleMaterialPath);
+            Renderer renderer = visual.GetComponent<Renderer>();
+            if (renderer != null && handleMaterial != null)
+            {
+                renderer.sharedMaterial = handleMaterial;
+            }
+        }
+
+        private static Transform CreateWhipTip(Transform parent)
+        {
+            Transform existing = parent.Find("Tip");
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            return CreateChild(parent, "Tip", new Vector3(0f, 0f, WhipTipDistance));
+        }
+
+        /// <summary>A light LineRenderer cord: a handful of points and a small sway, no physics.</summary>
+        private static LineRenderer CreateWhipRope(Transform parent)
+        {
+            Transform existing = parent.Find("Whip_Rope");
+            if (existing != null)
+            {
+                LineRenderer found = existing.GetComponent<LineRenderer>();
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            var ropeObject = new GameObject("Whip_Rope");
+            ropeObject.transform.SetParent(parent, false);
+            LineRenderer line = ropeObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = false;
+            line.positionCount = WhipRopeSegments;
+            line.widthMultiplier = 0.02f;
+            line.numCapVertices = 4;
+
+            Material ropeMaterial = AssetDatabase.LoadAssetAtPath<Material>(RopeMaterialPath);
+            if (ropeMaterial != null)
+            {
+                line.sharedMaterial = ropeMaterial;
+            }
+
+            for (var i = 0; i < WhipRopeSegments; i++)
+            {
+                float t = i / (float)(WhipRopeSegments - 1);
+                line.SetPosition(i, new Vector3(0f, 0f, WhipTipDistance) - Vector3.up * (WhipRopeLength * t));
+            }
+
+            return line;
+        }
+
+        private static AudioSource CreateWhipAudio(GameObject whipObject)
+        {
+            AudioSource source = whipObject.GetComponent<AudioSource>();
+            if (source == null)
+            {
+                source = whipObject.AddComponent<AudioSource>();
+            }
+
+            source.playOnAwake = false;
+            source.spatialBlend = 1f;
+            source.minDistance = 1.5f;
+            source.maxDistance = 35f;
+            source.rolloffMode = AudioRolloffMode.Linear;
+            return source;
+        }
+
+        /// <summary>Adds the handles and the whip speed tuning to the scene that is already open.</summary>
+        [MenuItem("Tools/Game/Apply Whip Setup (current scene)")]
+        public static void ApplyWhipSetupMenu()
+        {
+            bool applied = TryApplyWhipSetupToOpenScene(out string report);
+            if (!applied)
+            {
+                Debug.LogWarning(report);
+            }
+            else
+            {
+                Debug.Log(report);
+            }
+
+            if (!Application.isBatchMode && !suppressDialogs)
+            {
+                EditorUtility.DisplayDialog("Whip setup", report, "OK");
+            }
+        }
+
+        /// <summary>Batch entry point. Never shows dialogs.</summary>
+        public static void ApplyWhipSetupFromCommandLine()
+        {
+            if (!File.Exists(ScenePath))
+            {
+                throw new FileNotFoundException("The playable scene does not exist.", ScenePath);
+            }
+
+            suppressDialogs = true;
+            try
+            {
+                // Opening the scene single-mode would discard other scenes' unsaved work.
+                EditorSceneManager.SaveOpenScenes();
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                if (!TryApplyWhipSetupToOpenScene(out string report))
+                {
+                    throw new System.InvalidOperationException(report);
+                }
+
+                Debug.Log(report);
+            }
+            finally
+            {
+                suppressDialogs = false;
+            }
+        }
+
+        /// <summary>
+        /// Idempotent: creates the two handles if they are missing, reuses them if they are not, and
+        /// re-applies the whip speed tuning of the playable scene.
+        /// </summary>
+        private static bool TryApplyWhipSetupToOpenScene(out string report)
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            if (scene.path != ScenePath)
+            {
+                report = $"Open {ScenePath} first; the current scene is '{scene.path}'.";
+                return false;
+            }
+
+            GameObject vehicleRootObject = GameObject.Find("VehicleRoot");
+            CarriageMotor motor = Object.FindAnyObjectByType<CarriageMotor>();
+            if (vehicleRootObject == null || motor == null)
+            {
+                report = $"{ScenePath} has no VehicleRoot with a CarriageMotor, so the whips cannot be wired.";
+                return false;
+            }
+
+            int before = Object.FindObjectsByType<WhipHandle>(FindObjectsInactive.Include).Length;
+            CreateWhipHandles(vehicleRootObject.transform, motor);
+            SetFloat(motor, "accelerationPerStroke", WhipAccelerationPerStroke);
+            SetFloat(motor, "coastingDeceleration", WhipCoastingDeceleration);
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene))
+            {
+                report = $"Unity could not save {ScenePath}.";
+                return false;
+            }
+
+            int after = Object.FindObjectsByType<WhipHandle>(FindObjectsInactive.Include).Length;
+            bool valid = ValidateOpenScene(out string validation);
+            report =
+                $"Whip setup applied to {ScenePath}: {before} handle(s) before, {after} after, " +
+                $"accelerationPerStroke = {WhipAccelerationPerStroke}, " +
+                $"coastingDeceleration = {WhipCoastingDeceleration}.\n{validation}";
+            return valid;
         }
 
         // ---------------------------------------------------------------- road and ground
@@ -1211,6 +1541,42 @@ namespace JapaneseDemonHunter.GameplayEditor
                     "An unloaded cart starts with a neutral speed multiplier.", failures);
             }
 
+            WhipHandle[] whips = Object.FindObjectsByType<WhipHandle>(FindObjectsInactive.Include);
+            Require(whips.Length == 2, $"Exactly two whip handles exist (found {whips.Length}).", failures);
+            var hasLeftWhip = false;
+            var hasRightWhip = false;
+            foreach (WhipHandle whip in whips)
+            {
+                if (whip == null)
+                {
+                    continue;
+                }
+
+                if (whip.ExpectedHand == Handedness.Left)
+                {
+                    hasLeftWhip = true;
+                }
+
+                if (whip.ExpectedHand == Handedness.Right)
+                {
+                    hasRightWhip = true;
+                }
+
+                Require(whip.HasRequester,
+                    $"{whip.name} is connected to the cart acceleration contract.", failures);
+                Require(motor != null && whip.AccelerationRequester == motor,
+                    $"{whip.name} requests acceleration from the CarriageMotor.", failures);
+                Require(whip.VelocityReference != null && whip.VelocityReference.name == "VehicleRoot",
+                    $"{whip.name} measures its stroke against VehicleRoot instead of the moving world.", failures);
+                Require(whip.transform.parent != null && whip.transform.parent.name == "VehicleRoot",
+                    $"{whip.name} hangs from VehicleRoot and not from the XR rig.", failures);
+            }
+
+            Require(hasLeftWhip, "The left whip handle is assigned to the left hand.", failures);
+            Require(hasRightWhip, "The right whip handle is assigned to the right hand.", failures);
+            Require(Mathf.Approximately(motor != null ? motor.SpeedMultiplier : 1f, 1f),
+                "The whips read the load-limited ceiling of the carriage.", failures);
+
             GiantZombieSpawner giantSpawner = Object.FindAnyObjectByType<GiantZombieSpawner>();
             Require(giantSpawner != null && giantSpawner.SpawnWhenSpeedDrops,
                 "The giant is triggered by a drop in carriage speed.", failures);
@@ -1529,6 +1895,32 @@ namespace JapaneseDemonHunter.GameplayEditor
 
             property.objectReferenceValue = value;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Fills a reference only when it is still empty, so re-running the tooling never overwrites
+        /// a link that was set by hand in the Inspector.
+        /// </summary>
+        private static void WireObjectIfNull(Object target, string fieldName, Object value)
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            var serialized = new SerializedObject(target);
+            SerializedProperty property = serialized.FindProperty(fieldName);
+            if (property == null)
+            {
+                Debug.LogWarning($"Field '{fieldName}' was not found on {target.GetType().Name}.");
+                return;
+            }
+
+            if (property.objectReferenceValue == null)
+            {
+                property.objectReferenceValue = value;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         private static void SetInt(Object target, string fieldName, int value)

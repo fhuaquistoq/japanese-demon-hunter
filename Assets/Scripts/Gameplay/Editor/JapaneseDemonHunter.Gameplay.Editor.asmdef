@@ -8,6 +8,7 @@
     "Reins",
     "Oculus.Interaction",
     "Oculus.Interaction.OVR.Editor",
+    "Unity.InputSystem",
     "UnityEngine.UI",
     "Unity.RenderPipelines.Core.Runtime"
   ],

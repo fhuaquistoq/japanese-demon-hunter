@@ -1,0 +1,24 @@
+{
+  "name": "JapaneseDemonHunter.Gameplay.EditModeTests",
+  "rootNamespace": "JapaneseDemonHunter.Gameplay.Tests",
+  "references": [
+    "JapaneseDemonHunter.Gameplay",
+    "JapaneseDemonHunter.Prototype",
+    "Reins",
+    "Oculus.Interaction"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

@@ -5,7 +5,8 @@
     "JapaneseDemonHunter.Prototype",
     "JapaneseDemonHunter.Monsters",
     "Reins",
-    "Oculus.Interaction"
+    "Oculus.Interaction",
+    "Unity.InputSystem"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
