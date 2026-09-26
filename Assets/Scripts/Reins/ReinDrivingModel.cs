@@ -197,6 +197,35 @@ namespace Reins
         }
     }
 
+    /// <summary>Limits how long a rein may visually freeze after tracked selection is lost.</summary>
+    public sealed class ReinSelectionGraceModel
+    {
+        private readonly float _graceSeconds;
+        private float _missingSelectionSeconds;
+
+        public ReinSelectionGraceModel(float graceSeconds)
+        {
+            _graceSeconds = Mathf.Max(0f, graceSeconds);
+        }
+
+        public bool ShouldHoldPosition(bool hasValidTrackedSelection, float deltaTime)
+        {
+            if (hasValidTrackedSelection)
+            {
+                _missingSelectionSeconds = 0f;
+                return false;
+            }
+
+            if (_missingSelectionSeconds >= _graceSeconds)
+            {
+                return false;
+            }
+
+            _missingSelectionSeconds += Mathf.Max(0f, deltaTime);
+            return true;
+        }
+    }
+
     public static class ReinHandOwnership
     {
         public static bool CanDrive(

@@ -1,7 +1,10 @@
+using System;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Object = UnityEngine.Object;
 
 namespace JapaneseDemonHunter.Prototype.Tests
 {
@@ -38,6 +41,67 @@ namespace JapaneseDemonHunter.Prototype.Tests
             SmoothFollowCamera followCamera = Object.FindAnyObjectByType<SmoothFollowCamera>();
             Assert.That(followCamera, Is.Not.Null);
             Assert.That(followCamera.Target, Is.EqualTo(references.HunterTransform));
+        }
+
+        [Test]
+        public void FrontLaneMonsterSpawnUsesOneCenteredLaneAtConfiguredForwardOffset()
+        {
+            Type spawnerType = Type.GetType("JapaneseDemonHunter.Monsters.MonsterSpawner, JapaneseDemonHunter.Monsters");
+            Type entryType = Type.GetType("JapaneseDemonHunter.Monsters.MonsterSpawnEntry, JapaneseDemonHunter.Monsters");
+            Assert.That(spawnerType, Is.Not.Null);
+            Assert.That(entryType, Is.Not.Null);
+
+            GameObject cart = new GameObject("FrontLaneSpawnCart");
+            GameObject spawnerObject = new GameObject("FrontLaneSpawnSpawner");
+            try
+            {
+                cart.transform.position = new Vector3(2f, 3f, -4f);
+                cart.transform.rotation = Quaternion.Euler(0f, 37f, 0f);
+                Component spawner = spawnerObject.AddComponent(spawnerType);
+                SetPrivateField(spawnerType, spawner, "cartTransform", cart.transform);
+                SetPrivateField(spawnerType, spawner, "minimumPlayerDistance", 0f);
+                SetPrivateField(spawnerType, spawner, "obstacleMask", (LayerMask)0);
+
+                object entry = Activator.CreateInstance(entryType);
+                SetPublicField(entryType, entry, "spawnDirection", Enum.Parse(
+                    Type.GetType("JapaneseDemonHunter.Monsters.MonsterSpawnDirection, JapaneseDemonHunter.Monsters"),
+                    "FrontLane"));
+                SetPublicField(entryType, entry, "movementType", Enum.Parse(
+                    Type.GetType("JapaneseDemonHunter.Monsters.MonsterMovementType, JapaneseDemonHunter.Monsters"),
+                    "Flying"));
+                SetPublicField(entryType, entry, "frontLaneForwardRadius", 10f);
+                SetPublicField(entryType, entry, "frontLaneFlyingAltitude", 4.5f);
+
+                MethodInfo findPosition = spawnerType.GetMethod("TryFindSpawnPosition",
+                    new[] { entryType, typeof(Vector3).MakeByRefType() });
+                Assert.That(findPosition, Is.Not.Null);
+                for (int i = 0; i < 20; i++)
+                {
+                    object[] arguments = { entry, Vector3.zero };
+                    Assert.That(findPosition.Invoke(spawner, arguments), Is.True);
+                    Vector3 offset = (Vector3)arguments[1] - cart.transform.position;
+                    Assert.That(Vector3.Dot(offset, cart.transform.forward), Is.EqualTo(10f).Within(0.001f));
+                    float laneCoordinate = Vector3.Dot(offset, cart.transform.right) / 2.8f;
+                    Assert.That(laneCoordinate, Is.EqualTo(Mathf.Round(laneCoordinate)).Within(0.001f));
+                    Assert.That(Mathf.RoundToInt(laneCoordinate), Is.InRange(-1, 1));
+                    Assert.That(((Vector3)arguments[1]).y, Is.EqualTo(7.5f).Within(0.001f));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(spawnerObject);
+                Object.DestroyImmediate(cart);
+            }
+        }
+
+        private static void SetPrivateField(Type type, object instance, string name, object value)
+        {
+            type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(instance, value);
+        }
+
+        private static void SetPublicField(Type type, object instance, string name, object value)
+        {
+            type.GetField(name, BindingFlags.Instance | BindingFlags.Public).SetValue(instance, value);
         }
 
         [Test]

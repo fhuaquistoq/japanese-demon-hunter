@@ -37,13 +37,17 @@ namespace Reins
             Vector3 gravity,
             float deltaTime,
             float minimumY,
-            int constraintIterations)
+            int constraintIterations,
+            float damping = 0.985f,
+            float maximumStepSpeed = 6f)
         {
             ValidateBuffers(positions, previous, anchors);
             ValidateSpanLengths(spanSegmentLengths);
             var edgeCount = positions.Length / PinCount;
             deltaTime = Mathf.Max(0f, deltaTime);
             var gravityStep = gravity * (deltaTime * deltaTime);
+            var velocityRetention = Mathf.Clamp01(damping);
+            var maximumStep = Mathf.Max(0f, maximumStepSpeed) * deltaTime;
             for (var i = 0; i < positions.Length; i++)
             {
                 if (IsPin(i, positions.Length))
@@ -53,8 +57,18 @@ namespace Reins
                     continue;
                 }
 
+                // A rein has mass: without damping the Verlet integrator never sheds energy and the
+                // loop keeps accumulating motion until it snaps. Damping plus a per-frame step ceiling
+                // is what makes it read as a heavy rope instead of a rubber band.
                 var current = positions[i];
-                positions[i] += positions[i] - previous[i] + gravityStep;
+                var velocity = (positions[i] - previous[i]) * velocityRetention;
+                var step = velocity + gravityStep;
+                if (maximumStep > 0f && step.sqrMagnitude > maximumStep * maximumStep)
+                {
+                    step = step.normalized * maximumStep;
+                }
+
+                positions[i] += step;
                 previous[i] = current;
                 if (positions[i].y < minimumY)
                 {
@@ -63,7 +77,11 @@ namespace Reins
                 }
             }
 
-            for (var iteration = 0; iteration < Mathf.Max(1, constraintIterations); iteration++)
+            var iterations = Mathf.Max(1, constraintIterations);
+            // Gauss-Seidel over-corrects as iterations rise, so scale the relaxation down with them
+            // to keep the rope converging to a stable shape instead of oscillating.
+            var relaxation = 1f / iterations;
+            for (var iteration = 0; iteration < iterations; iteration++)
             {
                 for (var i = 0; i < positions.Length; i++)
                 {
@@ -76,7 +94,7 @@ namespace Reins
                     }
 
                     var segmentLength = spanSegmentLengths[i / edgeCount];
-                    var correction = delta * ((distance - segmentLength) / distance);
+                    var correction = delta * ((distance - segmentLength) / distance) * relaxation;
                     var firstPinned = IsPin(i, positions.Length);
                     var secondPinned = IsPin(next, positions.Length);
                     if (!firstPinned && !secondPinned)

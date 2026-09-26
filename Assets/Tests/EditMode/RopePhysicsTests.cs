@@ -82,6 +82,97 @@ namespace Reins.Tests
             }
         }
 
+        /// <summary>
+        /// The rein used to be an undamped Verlet loop, so it kept gaining energy every frame and
+        /// whipped around. Damping must bleed that energy away, and the step ceiling must clip the
+        /// spikes a fast hand movement produces.
+        /// </summary>
+        [Test]
+        public void DampingShedsEnergyThatAnUndampedLoopWouldKeep()
+        {
+            var anchors = CreateAsymmetricAnchors();
+            var spanSegmentLengths = new float[RopePhysics.PinCount];
+            RopePhysics.CalculateSpanSegmentLengths(anchors, PointCount, 1.06f, spanSegmentLengths);
+
+            var undampedPositions = new Vector3[PointCount];
+            var undampedPrevious = new Vector3[PointCount];
+            var dampedPositions = new Vector3[PointCount];
+            var dampedPrevious = new Vector3[PointCount];
+            RopePhysics.InitializeLoop(undampedPositions, undampedPrevious, anchors, 1.06f);
+            RopePhysics.InitializeLoop(dampedPositions, dampedPrevious, anchors, 1.06f);
+
+            for (var frame = 0; frame < 30; frame++)
+            {
+                RopePhysics.SimulateLoop(undampedPositions, undampedPrevious, anchors, spanSegmentLengths,
+                    Vector3.down * 9.81f, 1f / 60f, -0.4f, 12, 1f, 0f);
+                RopePhysics.SimulateLoop(dampedPositions, dampedPrevious, anchors, spanSegmentLengths,
+                    Vector3.down * 9.81f, 1f / 60f, -0.4f, 12, 0.9f, 0f);
+            }
+
+            Assert.Less(ResidualSpeed(dampedPositions, dampedPrevious),
+                ResidualSpeed(undampedPositions, undampedPrevious),
+                "A damped rein must settle faster than an undamped one.");
+        }
+
+        [Test]
+        public void StepCeilingClipsOversizedMotion()
+        {
+            const float maximumStepSpeed = 6f;
+            const float deltaTime = 1f / 60f;
+            float ceiling = maximumStepSpeed * deltaTime;
+
+            float clamped = RunDegenerateSpike(maximumStepSpeed, deltaTime);
+            float unclamped = RunDegenerateSpike(0f, deltaTime);
+
+            Assert.LessOrEqual(clamped, ceiling + 0.0001f,
+                "A capped step must not travel further than the ceiling allows.");
+            Assert.Greater(unclamped, ceiling,
+                "Without the ceiling the same spike would exceed it, so the assertion above is meaningful.");
+        }
+
+        /// <summary>
+        /// Runs one integration step on a loop whose four anchors coincide, so every span rest length
+        /// is zero and the distance constraint has nothing to correct. That isolates the integrator
+        /// step, which is the only thing the ceiling is meant to bound; with a real loop the
+        /// constraint projection afterwards dominates the final position and hides it.
+        /// </summary>
+        private static float RunDegenerateSpike(float maximumStepSpeed, float deltaTime)
+        {
+            const float unusedFloor = -50f;
+            var anchors = new Vector3[RopePhysics.PinCount];
+            var spanSegmentLengths = new float[RopePhysics.PinCount];
+
+            var positions = new Vector3[PointCount];
+            var previous = new Vector3[PointCount];
+            RopePhysics.InitializeLoop(positions, previous, anchors, 1f);
+            RopePhysics.CalculateSpanSegmentLengths(anchors, PointCount, 1f, spanSegmentLengths);
+
+            const int seededPoint = 2;
+            previous[seededPoint] = positions[seededPoint] - Vector3.down * 2f;
+            var before = positions[seededPoint];
+
+            RopePhysics.SimulateLoop(positions, previous, anchors, spanSegmentLengths,
+                Vector3.zero, deltaTime, unusedFloor, 12, 1f, maximumStepSpeed);
+
+            return Vector3.Distance(positions[seededPoint], before);
+        }
+
+        private static float ResidualSpeed(Vector3[] positions, Vector3[] previous)
+        {
+            float total = 0f;
+            for (var i = 0; i < PointCount; i++)
+            {
+                if (i % EdgesPerSpan == 0)
+                {
+                    continue;
+                }
+
+                total = Mathf.Max(total, Vector3.Distance(positions[i], previous[i]));
+            }
+
+            return total;
+        }
+
         private static void SimulateFrames(
             Vector3[] positions, Vector3[] previous, Vector3[] anchors,
             float[] spanSegmentLengths, int frameCount)

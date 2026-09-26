@@ -27,12 +27,20 @@ namespace JapaneseDemonHunter.Monsters
         private float stateElapsed;
         private bool initialized;
         private bool inactiveNotificationSent;
+        private bool attachmentEnabledForSpawn = true;
+        private bool isFaceThreatSpawn;
+        private bool isStaged;
+        private bool isFaceThreatApproaching;
 
         public MonsterState State { get; private set; } = MonsterState.Spawn;
         public bool IsDead => State == MonsterState.Dead;
         public bool IsInitialized => initialized;
+        public bool IsStaged => isStaged;
         public IMonsterTarget CurrentTarget => targetSelector != null ? targetSelector.CurrentTarget : null;
         public MonsterMovementType MovementType => movement != null ? movement.MovementType : MonsterMovementType.Ground;
+        public MonsterSpawnDirection SpawnDirection { get; private set; } = MonsterSpawnDirection.Rear;
+        public int FrontLaneIndex { get; private set; }
+        public bool IsFaceThreatSpawn => isFaceThreatSpawn;
         public MonsterAttachment Attachment => attachment;
         public Transform CartTransform => spawnContext.cartTransform;
         public Vector3 RearDirection => spawnContext.cartTransform != null && spawnContext.rearReachPoint != null
@@ -75,9 +83,38 @@ namespace JapaneseDemonHunter.Monsters
             }
         }
 
+        public void ConfigureSpawnDirection(MonsterSpawnDirection direction, int frontLaneIndex = 0)
+        {
+            if (!initialized)
+            {
+                SpawnDirection = direction;
+                FrontLaneIndex = Mathf.Clamp(frontLaneIndex, -1, 1);
+            }
+        }
+
+        public void ConfigureFaceThreatSpawn(bool enabled)
+        {
+            if (!initialized) isFaceThreatSpawn = enabled;
+        }
+
+        public void ConfigureAttachmentEnabled(bool enabled)
+        {
+            if (initialized)
+            {
+                return;
+            }
+
+            attachmentEnabledForSpawn = enabled;
+        }
+
         public void Initialize(MonsterSpawnContext context)
         {
             ResolveLocalReferences();
+            if (!attachmentEnabledForSpawn)
+            {
+                attachment = null;
+            }
+
             spawnContext = context;
             initialized = true;
             inactiveNotificationSent = false;
@@ -106,6 +143,12 @@ namespace JapaneseDemonHunter.Monsters
         {
             if (!initialized || deltaTime <= 0f)
             {
+                return;
+            }
+
+            if (isStaged || isFaceThreatApproaching)
+            {
+                movement.Stop();
                 return;
             }
 
@@ -180,6 +223,39 @@ namespace JapaneseDemonHunter.Monsters
 
             SetState(MonsterState.Dead, true);
             Died?.Invoke(this);
+        }
+
+        /// <summary>Temporarily transfers movement control to the face-threat approach controller.</summary>
+        public void BeginFaceThreatApproach()
+        {
+            if (isStaged || isFaceThreatApproaching) return;
+            isFaceThreatApproaching = true;
+            attack?.CancelAttack();
+            GetComponent<AttachedMonsterAttack>()?.CancelAttack();
+            targetSelector?.ClearTarget();
+            movement?.Stop();
+        }
+
+        /// <summary>Moves toward a fixed, lane-selected stand-off point without running monster AI.</summary>
+        public void TickFaceThreatApproach(Vector3 destination, float deltaTime)
+        {
+            if (!isFaceThreatApproaching || movement == null || deltaTime <= 0f) return;
+            movement.TickMoveTowards(destination, movement.ApproachSpeed, deltaTime);
+        }
+
+        /// <summary>Pauses monster AI once it reaches its safe stand-off; retirement remains available.</summary>
+        public void StageForFaceThreat()
+        {
+            if (isStaged)
+            {
+                return;
+            }
+
+            isStaged = true;
+            attack?.CancelAttack();
+            GetComponent<AttachedMonsterAttack>()?.CancelAttack();
+            targetSelector?.ClearTarget();
+            movement?.Stop();
         }
 
         public void Retire()

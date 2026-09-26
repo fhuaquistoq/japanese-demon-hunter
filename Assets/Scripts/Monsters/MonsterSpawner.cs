@@ -6,11 +6,21 @@ using JapaneseDemonHunter.Prototype;
 
 namespace JapaneseDemonHunter.Monsters
 {
+    public enum MonsterSpawnDirection
+    {
+        Rear,
+        FrontLane
+    }
+
     [Serializable]
     public sealed class MonsterSpawnEntry
     {
         public GameObject prefab;
         public MonsterMovementType movementType;
+        public MonsterSpawnDirection spawnDirection = MonsterSpawnDirection.Rear;
+        public bool isFaceThreat;
+        [Min(0f)] public float frontLaneForwardRadius = 12f;
+        [Min(0f)] public float frontLaneFlyingAltitude = 4f;
         [Min(0f)] public float weight = 1f;
         [Min(0f)] public float minimumRadius;
         [Min(0f)] public float maximumRadius;
@@ -59,6 +69,7 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField] private LayerMask obstacleMask = ~0;
         [SerializeField, Min(1f)] private float maximumDespawnDistance = 90f;
         [SerializeField, Range(5f, 80f)] private float rearSpawnHalfAngle = 48f;
+        [SerializeField, Min(0.1f)] private float frontLaneSpacing = 2.8f;
 
         private readonly HashSet<MonsterBase> activeMonsters = new HashSet<MonsterBase>();
         private float nextSpawnTime;
@@ -155,8 +166,9 @@ namespace JapaneseDemonHunter.Monsters
             }
 
             MonsterSpawnEntry entry = requestedEntry ?? SelectWeightedEntry();
+            int frontLaneIndex = 0;
             if (entry == null || entry.prefab == null ||
-                !TryFindSpawnPosition(entry, out Vector3 position))
+                !TryFindSpawnPosition(entry, out Vector3 position, out frontLaneIndex))
             {
                 return false;
             }
@@ -182,6 +194,9 @@ namespace JapaneseDemonHunter.Monsters
                 }
             }
 
+            monster.ConfigureSpawnDirection(entry.spawnDirection, frontLaneIndex);
+            monster.ConfigureFaceThreatSpawn(entry.isFaceThreat);
+            monster.ConfigureAttachmentEnabled(entry.spawnDirection != MonsterSpawnDirection.FrontLane);
             MonsterAttachment spawnedAttachment = monster.GetComponent<MonsterAttachment>();
             if (spawnedAttachment != null && entry.attachmentLoad > 0f)
             {
@@ -224,10 +239,21 @@ namespace JapaneseDemonHunter.Monsters
 
         public bool TryFindSpawnPosition(MonsterSpawnEntry entry, out Vector3 position)
         {
+            return TryFindSpawnPosition(entry, out position, out _);
+        }
+
+        private bool TryFindSpawnPosition(MonsterSpawnEntry entry, out Vector3 position, out int frontLaneIndex)
+        {
             position = default;
+            frontLaneIndex = 0;
             if (entry == null || cartTransform == null)
             {
                 return false;
+            }
+
+            if (entry.spawnDirection == MonsterSpawnDirection.FrontLane)
+            {
+                return TryFindFrontLanePosition(entry, out position, out frontLaneIndex);
             }
 
             float entryMinimumRadius = entry.minimumRadius > 0f ? entry.minimumRadius : minimumRadius;
@@ -244,6 +270,48 @@ namespace JapaneseDemonHunter.Monsters
             }
 
             return false;
+        }
+
+        private bool TryFindFrontLanePosition(MonsterSpawnEntry entry, out Vector3 position, out int lane)
+        {
+            position = default;
+            lane = UnityEngine.Random.Range(-1, 2);
+            Vector3 forward = Vector3.ProjectOnPlane(cartTransform.forward, Vector3.up).normalized;
+            if (forward.sqrMagnitude < 0.001f)
+            {
+                forward = Vector3.forward;
+            }
+
+            Vector3 candidate = cartTransform.position + forward * Mathf.Max(0f, entry.frontLaneForwardRadius) +
+                                cartTransform.right * (lane * frontLaneSpacing);
+
+            if (entry.movementType == MonsterMovementType.Flying)
+            {
+                candidate.y = cartTransform.position.y + Mathf.Max(0f, entry.frontLaneFlyingAltitude);
+            }
+            else
+            {
+                Vector3 rayOrigin = candidate + Vector3.up * groundProbeHeight;
+                RaycastHit[] groundHits = Physics.RaycastAll(rayOrigin, Vector3.down, groundProbeDistance,
+                    groundMask, QueryTriggerInteraction.Ignore);
+                Array.Sort(groundHits, (left, right) => left.distance.CompareTo(right.distance));
+                RaycastHit? validGroundHit = groundHits.FirstOrDefault(hit =>
+                    hit.collider != null && hit.collider.GetComponentInParent<MonsterGroundSurface>() != null);
+                if (!validGroundHit.HasValue || validGroundHit.Value.collider == null)
+                {
+                    return false;
+                }
+
+                candidate = validGroundHit.Value.point;
+            }
+
+            if (!IsCandidateClear(candidate, entry.movementType))
+            {
+                return false;
+            }
+
+            position = candidate;
+            return true;
         }
 
         public bool TryValidatePositionAtAngle(

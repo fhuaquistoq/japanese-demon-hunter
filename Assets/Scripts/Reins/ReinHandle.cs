@@ -47,10 +47,22 @@ namespace Reins
         [SerializeField, Min(0f)] private float minimumDropSpeed = 0.30f;
         [Tooltip("Warn once in the console when the rope is grabbed but hand tracking cannot drive it.")]
         [SerializeField] private bool logGrabDiagnostics = true;
+        [Tooltip("Briefly freeze the grip visually when tracked selection is missing or invalid; this never enables gestures.")]
+        [SerializeField, Min(0f)] private float selectionGraceSeconds = 0.12f;
+
+        [Header("Punto neutro del gesto")]
+        [Tooltip("Hand speed below which the grip counts as at rest and the neutral point drifts to meet it.")]
+        [SerializeField, Min(0f)] private float settleSpeed = 0.25f;
+        [Tooltip("How fast the neutral point follows the resting hand. It must stay under the stroke's " +
+                 "minimum drop speed so re-centring can never be mistaken for a lash.")]
+        [SerializeField, Min(0f)] private float recenterSpeed = 0.18f;
 
         private readonly List<GrabZone> _zones = new List<GrabZone>();
+        private ReinSelectionGraceModel _selectionGrace;
+        private int _lastGripUpdateFrame = -1;
         private Vector3 _baselineLocalPosition;
         private Vector3 _wristPositionOffsetLocal;
+        private Vector3 _previousHeldLocalPosition;
         private IHand _heldHand;
         private Handedness _holdingHand;
         private float _fallSpeed;
@@ -90,6 +102,7 @@ namespace Reins
             }
 
             EnsureZones();
+            _selectionGrace = new ReinSelectionGraceModel(selectionGraceSeconds);
         }
 
         private void EnsureZones()
@@ -131,6 +144,12 @@ namespace Reins
         /// <summary>Updates the grip anchor from tracked hand input without interpreting a gesture.</summary>
         public void UpdateGrip(float deltaTime)
         {
+            if (_lastGripUpdateFrame == Time.frameCount)
+            {
+                return;
+            }
+
+            _lastGripUpdateFrame = Time.frameCount;
             EnsureZones();
             IsHeld = false;
             IsBeingTouched = false;
@@ -151,52 +170,74 @@ namespace Reins
                     IHand hand = interactor.Hand;
                     if (hand != null && CanDrive(hand))
                     {
-                        IsHeld = true;
                         _heldHand = hand;
                         _holdingHand = hand.Handedness;
                     }
                 }
             }
 
-            if (IsHeld && _heldHand != null &&
+            if (_heldHand != null &&
                 _heldHand.GetJointPose(HandJointId.HandWristRoot, out Pose wristPose))
             {
+                IsHeld = true;
                 if (!_wasHeld)
                 {
                     _baselineLocalPosition = transform.localPosition;
                     _wristPositionOffsetLocal = transform.localPosition - ToParentSpace(wristPose.position);
+                    _previousHeldLocalPosition = transform.localPosition;
                 }
 
                 // Follow tracked wrist translation; the captured offset keeps the grip at its grab point.
                 transform.localPosition = ToParentSpace(wristPose.position) + _wristPositionOffsetLocal;
+                RecenterBaseline(deltaTime);
                 _fallSpeed = 0f;
                 _wasHeld = true;
                 _diagnosticLogged = false;
+                _selectionGrace?.ShouldHoldPosition(true, deltaTime);
                 return;
             }
 
-            if (IsBeingTouched && _heldHand == null)
-            {
-                // Held by an unexpected hand or without valid tracking: keep the rope still, do not drive.
-                _fallSpeed = 0f;
-                _wasHeld = false;
-                LogDiagnosticOnce();
-                return;
-            }
-
-            if (IsHeld)
-            {
-                // Tracking became invalid while selected. Freeze the grip until valid wrist data returns.
-                IsHeld = false;
-                _fallSpeed = 0f;
-                _wasHeld = false;
-                LogDiagnosticOnce();
-                return;
-            }
-
+            _heldHand = null;
+            _holdingHand = default;
             _wasHeld = false;
+            if (IsBeingTouched)
+            {
+                LogDiagnosticOnce();
+            }
+
+            if (_selectionGrace != null && _selectionGrace.ShouldHoldPosition(false, deltaTime))
+            {
+                _fallSpeed = 0f;
+                return;
+            }
+
             DropTowardsRest(deltaTime);
             ReleaseZones();
+        }
+
+        /// <summary>
+        /// Drifts the neutral point towards wherever the hand has come to rest, so the stroke can be
+        /// made from any posture. The baseline is otherwise frozen at the instant of the grab: after
+        /// grabbing while seated and then standing up, the rein stayed permanently "lifted" and could
+        /// never re-arm, which is what made the stroke stop working. The drift is capped below the
+        /// gesture's minimum drop speed and skipped while the hand is moving fast, so it can neither
+        /// fire a stroke on its own nor swallow a real one.
+        /// </summary>
+        private void RecenterBaseline(float deltaTime)
+        {
+            Vector3 current = transform.localPosition;
+            float handSpeed = deltaTime > 0f
+                ? Vector3.Distance(current, _previousHeldLocalPosition) / deltaTime
+                : 0f;
+            _previousHeldLocalPosition = current;
+
+            if (recenterSpeed <= 0f || handSpeed > settleSpeed)
+            {
+                return;
+            }
+
+            _baselineLocalPosition = Vector3.MoveTowards(
+                _baselineLocalPosition, current, recenterSpeed * deltaTime);
         }
 
         private bool CanDrive(IHand hand)

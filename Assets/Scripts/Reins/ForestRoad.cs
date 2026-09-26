@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Reins
@@ -10,6 +11,9 @@ namespace Reins
         [SerializeField, Min(8f)] private float tileLength = 18f;
         [SerializeField, Min(6f)] private float roadWidth = 9.6f;
         [SerializeField, Min(0.1f)] private float laneWidth = 2.8f;
+        [SerializeField, Min(0.1f)] private float laneMarkingWidth = 0.09f;
+        [SerializeField] private Color laneMarkingColor = new Color(0.66f, 0.57f, 0.39f);
+        [SerializeField, Range(0f, 1f)] private float laneMarkingStrength = 0.72f;
         [SerializeField] private Transform vehicleRoot;
         [SerializeField, Min(0.1f)] private float stoneLaneWidth = 1.15f;
         [SerializeField, Min(0.1f)] private float stoneDepth = 0.65f;
@@ -27,10 +31,22 @@ namespace Reins
         [SerializeField] private GameObject[] treePrefabs;
         [SerializeField] private GameObject rockPrefab;
         [SerializeField, Min(1f)] private float treeHeight = 7f;
-        [SerializeField, Range(1, 4)] private int forestRows = 3;
-        [SerializeField, Range(3, 7)] private int treesPerRow = 5;
+        [SerializeField, Range(1, 6)] private int forestRows = 3;
+        [SerializeField, Range(3, 10)] private int treesPerRow = 5;
         [SerializeField, Min(1f)] private float forestRowSpacing = 5f;
         [SerializeField, Min(0.05f)] private float rockFootprintPadding = 1f;
+
+        [Header("Faroles de la carretera (opcional)")]
+        [SerializeField] private GameObject postLanternPrefab;
+        [SerializeField, Min(4f)] private float postLanternSpacing = 18f;
+        [SerializeField, Min(0f)] private float postLanternOffset = 1.1f;
+        [SerializeField, Min(0.1f)] private float postLanternHeight = 3f;
+        [SerializeField] private Color postLanternColor = new Color(1f, 0.70f, 0.34f);
+        [SerializeField, Min(0f)] private float postLanternIntensity = 4.5f;
+        [SerializeField, Min(0f)] private float postLanternRange = 22f;
+        [Tooltip("How many tiles either side of the carriage keep their lanterns lit. Real-time point " +
+                 "lights are far too expensive to keep every one of them switched on.")]
+        [SerializeField, Range(0, 6)] private int lanternLitChunkSpan = 3;
 
         [Header("Final del camino (opcional)")]
         [SerializeField, Min(0)] private int totalTiles;
@@ -71,6 +87,7 @@ namespace Reins
             public Transform mainRoad;
             public readonly bool[] consumed = new bool[3];
             public int blockedMask;
+            public readonly List<Light> lanternLights = new List<Light>();
 
             public bool IsBuilt => root != null && root.gameObject.activeSelf;
         }
@@ -125,6 +142,34 @@ namespace Reins
                 if (_tiles[i].IsBuilt && _tiles[i].chunkIndex < _cartChunkIndex - RecycleBehindChunks)
                 {
                     RecycleTile(_tiles[i]);
+                }
+            }
+
+            UpdateLanternLights();
+        }
+
+        /// <summary>
+        /// Switches the road lanterns on only around the carriage. Every lantern keeps its own emissive
+        /// body, so the distant ones still read as lit while their real lights stay switched off.
+        /// </summary>
+        private void UpdateLanternLights()
+        {
+            for (var i = 0; i < _tiles.Length; i++)
+            {
+                Tile tile = _tiles[i];
+                if (!tile.IsBuilt || tile.lanternLights.Count == 0)
+                {
+                    continue;
+                }
+
+                bool lit = Mathf.Abs(tile.chunkIndex - _cartChunkIndex) <= lanternLitChunkSpan;
+                for (var l = 0; l < tile.lanternLights.Count; l++)
+                {
+                    Light light = tile.lanternLights[l];
+                    if (light != null && light.enabled != lit)
+                    {
+                        light.enabled = lit;
+                    }
                 }
             }
         }
@@ -196,14 +241,16 @@ namespace Reins
             int poolSize = Mathf.Clamp(tileCount, 6, 10);
             _path = CreatePathModel();
 
-            _roadMaterial = CreateMaterial(new Color(0.43f, 0.34f, 0.24f));
+            // Earth carriageway against a dark green verge: under a night this dim the two otherwise
+            // wash into the same colour and the road stops reading as a road.
+            _roadMaterial = CreateMaterial(new Color(0.44f, 0.30f, 0.17f));
             _dirtTexture = CreateDirtTexture();
             _roadMaterial.mainTexture = _dirtTexture;
-            _roadMaterial.mainTextureScale = new Vector2(1.5f, 3f);
-            _vergeMaterial = CreateMaterial(new Color(0.16f, 0.34f, 0.12f));
+            _roadMaterial.mainTextureScale = new Vector2(1f, 3f);
+            _vergeMaterial = CreateMaterial(new Color(0.09f, 0.20f, 0.08f));
             _dividerMaterial = CreateMaterial(new Color(0.86f, 0.79f, 0.53f));
-            _trunkMaterial = CreateMaterial(new Color(0.28f, 0.16f, 0.08f));
-            _leafMaterial = CreateMaterial(new Color(0.10f, 0.30f, 0.12f));
+            _trunkMaterial = CreateMaterial(new Color(0.24f, 0.14f, 0.07f));
+            _leafMaterial = CreateMaterial(new Color(0.07f, 0.19f, 0.09f));
             _stoneMaterial = CreateMaterial(new Color(0.34f, 0.32f, 0.29f));
 
             _tiles = new Tile[poolSize];
@@ -238,7 +285,9 @@ namespace Reins
             _rearForest.transform.SetParent(transform, false);
             for (int row = 0; row < forestRows; row++)
             {
-                for (int column = 0; column < 7; column++)
+                // One more column than a road tile so the wall behind the carriage has no seam.
+                int columns = Mathf.Max(4, treesPerRow + 1);
+                for (int column = 0; column < columns; column++)
                 {
                     for (int side = -1; side <= 1; side += 2)
                     {
@@ -248,7 +297,9 @@ namespace Reins
                         tree.localPosition = new Vector3(
                             side * (roadWidth * 0.5f + 2f + row * forestRowSpacing + seed % 3),
                             0f, 4f + column * 7.5f + row * 2f);
-                        if (row == 0 && TryCreateTreeVisual(tree, seed)) continue;
+                        if (TryCreateTreeVisual(tree, seed)) continue;
+                        // Only reached when no tree model is assigned: the block tree below is the
+                        // bare-bones stand-in for a project that ships without the fbx art.
                         float height = 4f + seed % 4 * 0.45f;
                         CreatePart(tree, "Trunk", PrimitiveType.Cylinder,
                             new Vector3(0f, height * 0.25f, 0f),
@@ -345,7 +396,9 @@ namespace Reins
                         treeRoot.SetParent(tileRoot, false);
                         treeRoot.localPosition = new Vector3(x, 0f, z);
 
-                        if (row == 0 && TryCreateTreeVisual(treeRoot, seed)) continue;
+                        if (TryCreateTreeVisual(treeRoot, seed)) continue;
+                        // Only reached when no tree model is assigned: the block tree below is the
+                        // bare-bones stand-in for a project that ships without the fbx art.
                         float height = 3.5f + (seed % 4) * 0.55f;
                         CreatePart(treeRoot, "Trunk", PrimitiveType.Cylinder,
                             new Vector3(0f, height * 0.25f, 0f), new Vector3(0.22f, height * 0.25f, 0.22f), _trunkMaterial);
@@ -355,7 +408,58 @@ namespace Reins
                 }
             }
 
+            BuildPostLanterns(tileRoot, tile);
             BuildStones(tile, index);
+        }
+
+        /// <summary>
+        /// A lit post on each side of the carriageway. They belong to the tile so they recycle with the
+        /// road instead of lining its whole length at once, and only the tiles near the carriage keep
+        /// their real lights switched on.
+        /// </summary>
+        private void BuildPostLanterns(Transform tileRoot, Tile tile)
+        {
+            tile.lanternLights.Clear();
+            if (postLanternPrefab == null)
+            {
+                return;
+            }
+
+            int posts = Mathf.Max(1, Mathf.RoundToInt(tileLength / Mathf.Max(4f, postLanternSpacing)));
+            for (var post = 0; post < posts; post++)
+            {
+                float z = -(post + 0.5f) * tileLength / posts;
+                for (var side = -1; side <= 1; side += 2)
+                {
+                    var holder = new GameObject("PostLantern_" + side + "_" + post).transform;
+                    holder.SetParent(tileRoot, false);
+                    holder.localPosition = new Vector3(
+                        side * (roadWidth * 0.5f + postLanternOffset), 0f, z);
+                    holder.localRotation = Quaternion.identity;
+
+                    GameObject instance = Instantiate(postLanternPrefab, holder, false);
+                    instance.name = "PostLantern_Model";
+                    FitUniformHeight(instance, postLanternHeight);
+
+                    tile.lanternLights.Add(CreatePostLanternLight(holder));
+                }
+            }
+        }
+
+        private Light CreatePostLanternLight(Transform holder)
+        {
+            var lightObject = new GameObject("LanternLight");
+            lightObject.transform.SetParent(holder, false);
+            // The light sits inside the lantern head rather than at the foot of the post.
+            lightObject.transform.localPosition = new Vector3(0f, postLanternHeight * 0.86f, 0f);
+            Light light = lightObject.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = postLanternColor;
+            light.intensity = postLanternIntensity;
+            light.range = postLanternRange;
+            light.shadows = LightShadows.None;
+            light.enabled = false;
+            return light;
         }
 
         private bool TryCreateTreeVisual(Transform parent, int variationSeed)
@@ -656,7 +760,7 @@ namespace Reins
             return material;
         }
 
-        private static Texture2D CreateDirtTexture()
+        private Texture2D CreateDirtTexture()
         {
             const int size = 128;
             var texture = new Texture2D(size, size, TextureFormat.RGB24, false)
@@ -665,23 +769,54 @@ namespace Reins
                 wrapMode = TextureWrapMode.Repeat,
                 filterMode = FilterMode.Bilinear
             };
+            texture.SetPixels(CreateDirtPixels(size));
+            texture.Apply(false, true);
+            return texture;
+        }
+
+        private Color[] CreateDirtPixels(int size)
+        {
             var pixels = new Color[size * size];
             for (int y = 0; y < size; y++)
             {
                 for (int x = 0; x < size; x++)
                 {
-                    float noise = Mathf.PerlinNoise(x * 0.13f, y * 0.13f) * 0.26f +
-                                  Mathf.PerlinNoise(x * 0.035f, y * 0.035f) * 0.28f;
+                    float u = (x + 0.5f) / size;
+                    float v = (y + 0.5f) / size;
+                    float noise = TileablePerlin(u, v, 16f) * 0.26f +
+                                  TileablePerlin(u, v, 4f) * 0.28f;
                     float tracks = Mathf.Abs(x - size * 0.25f) < 7f ||
                                    Mathf.Abs(x - size * 0.75f) < 7f ? -0.09f : 0f;
                     float shade = Mathf.Clamp01(0.45f + noise + tracks);
-                    pixels[y * size + x] = new Color(shade, shade * 0.88f, shade * 0.69f);
+                    Color dirt = new Color(shade, shade * 0.88f, shade * 0.69f);
+                    float localX = ((x + 0.5f) / size - 0.5f) * roadWidth;
+                    float leftDividerDistance = Mathf.Abs(localX + laneWidth * 0.5f);
+                    float rightDividerDistance = Mathf.Abs(localX - laneWidth * 0.5f);
+                    if (Mathf.Min(leftDividerDistance, rightDividerDistance) <= laneMarkingWidth * 0.5f)
+                    {
+                        dirt = Color.Lerp(dirt, laneMarkingColor, laneMarkingStrength);
+                    }
+
+                    pixels[y * size + x] = dirt;
                 }
             }
 
-            texture.SetPixels(pixels);
-            texture.Apply(false, true);
-            return texture;
+            return pixels;
+        }
+
+        /// <summary>
+        /// Perlin noise made periodic over the whole texture. Raw Perlin does not line up across its
+        /// own edges, and the road repeats this texture three times per tile, which drew a hard
+        /// horizontal band across the entire carriageway every few metres. Blending the four shifted
+        /// copies makes the pattern wrap, so the repeats are invisible.
+        /// </summary>
+        private static float TileablePerlin(float u, float v, float frequency)
+        {
+            float a = Mathf.PerlinNoise(u * frequency, v * frequency);
+            float b = Mathf.PerlinNoise((u - 1f) * frequency, v * frequency);
+            float c = Mathf.PerlinNoise(u * frequency, (v - 1f) * frequency);
+            float d = Mathf.PerlinNoise((u - 1f) * frequency, (v - 1f) * frequency);
+            return Mathf.Lerp(Mathf.Lerp(a, b, u), Mathf.Lerp(c, d, u), v);
         }
 
         private static void DestroyMaterial(Material material)

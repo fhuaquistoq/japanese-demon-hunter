@@ -33,10 +33,15 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const string CarriagePrefabPath = "Assets/Prefabs/Carriage/CarriagePrototype.prefab";
         private const string RopeProxyPrefabPath = "Assets/Prefabs/Interaction/RopeProxy.prefab";
         private const string RopeMaterialPath = "Assets/Materials/Prototype/Mat_RopeProxy.mat";
+        private const string ReinGripMaterialPath = "Assets/Materials/Game/Mat_ReinGrip.mat";
+        private const string WagonBodyMaterialPath = "Assets/Materials/Game/Mat_Wagon_Body.mat";
+        private const string WagonHardwareMaterialPath = "Assets/Materials/Game/Mat_Wagon_Hardware.mat";
         private const string ZombiePrefabPath = "Assets/Art/Monsters/Zombie/Prefabs/ZombieDemon.prefab";
         private const string BatPrefabPath = "Assets/Art/Monsters/Bat/Prefabs/BatDemon.prefab";
         private const string GiantPrefabPath = "Assets/Art/Monsters/GiantZombie/Prefabs/GiantZombie.prefab";
         private const string HorseModelPath = "Assets/Art/Monsters/Horse/Horse.fbx";
+        private const string HorseControllerPath = "Assets/Animations/Horse/Horse.controller";
+        private const string WagonModelPath = "Assets/Art/Wagon/Wild West Cart.obj";
         private const string KnifeModelPath = "Assets/Art/Monsters/Knife/Knife.fbx";
         private const string RockModelPath = "Assets/Art/Monsters/Rock/Resource_Rock_2.fbx";
         private const string AccelerateClipPath = "Assets/Art/Audio/latigo-avanza.mp3";
@@ -58,6 +63,48 @@ namespace JapaneseDemonHunter.GameplayEditor
         // so every instance is turned 180 degrees to face the direction of travel.
         private const float HorseTargetHeight = 2.35f;
         private const float HorseYawDegrees = 180f;
+        // The wagon obj is authored with its length along its own X and its wheel axles along Z, so
+        // it is turned a quarter turn to travel along the carriage's -Z. Its fit is otherwise derived
+        // from its own bounds because the obj ships without a matching mtl or group names.
+        private const float WagonYawDegrees = 90f;
+        // The bed must be a little wider than both horses together, so the pair reads as harnessed to
+        // it instead of standing beside it.
+        private const float WagonWidthMargin = 0.30f;
+        // Overall size of the bed once it has been fitted to the horses. Scaling the whole model keeps
+        // its proportions; only the width would otherwise leave it wider than it is long.
+        private const float WagonSizeMultiplier = 2f;
+        // Gap between the horses' hindquarters and the front of the bed, so the gait never clips it.
+        private const float WagonHorseClearance = 0.20f;
+        // Fallback deck ratio, used only if the horse models are missing.
+        private const float WagonDeckWidthScale = 0.95f;
+        // The lamps sit on the bed rails, inset from the corners so they stay inside the footprint.
+        private const float LampCornerInset = 0.16f;
+        private const string LanternStandingModelPath = "Assets/Art/Lanterns/lantern_standing.fbx";
+        private const string PostLanternModelPath = "Assets/Art/Lanterns/post_lantern.fbx";
+        private const float LanternStandingHeight = 0.95f;
+        // Where the flame burns inside the standing lantern, as a fraction of its height.
+        private const float LanternFlameHeight = 0.52f;
+        // Warm firelight rather than a lantern-white: the night is dark on purpose and these are candles.
+        private static readonly Color LanternFlameColor = new Color(1f, 0.78f, 0.44f);
+        private const float LanternFrontIntensity = 6f;
+        private const float LanternFrontRange = 24f;
+        private const float LanternRearIntensity = 5f;
+        private const float LanternRearRange = 22f;
+        // The lamp's slow breathing: wide enough to notice, slow enough not to flicker.
+        private const float LanternPulseAmplitude = 0.14f;
+        private const float LanternPulseFrequency = 0.16f;
+        private const float LanternGallopCueStartSpeed = 3.4f;
+        private const float LanternGallopCueMaximumSpeed = 8f;
+        private const float LanternGallopIntensityBoost = 0.18f;
+        // Roadside posts. One pair per tile keeps them recycling with the road instead of lining 700 m.
+        private const float PostLanternHeight = 3f;
+        private const float PostLanternOffset = 1.1f;
+        private const float PostLanternSpacing = 18f;
+        private static readonly Color PostLanternColor = new Color(1f, 0.70f, 0.34f);
+        private const float PostLanternIntensity = 5f;
+        private const float PostLanternRange = 24f;
+        // How far below the head the rein collar sits, so the rope meets the neck, not the muzzle.
+        private const float ReinCollarDrop = 0.34f;
         private const float KnifeTargetLength = 0.85f;
         private const float PunchDamage = 5f;
         private const float KnifeDamage = 12f;
@@ -81,9 +128,14 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const float WhipRopeLength = 1.05f;
         private const int WhipRopeSegments = 5;
 
-        // A stroke adds a little more than before; the coasting bleed is much gentler so the ride
-        // keeps its speed between strokes. Both remain editable in the Inspector.
-        private const float WhipAccelerationPerStroke = 2.0f;
+        // The horse's top speed. A stroke must be a step towards it rather than an instant win, so the
+        // per-stroke gain is derived from this speed and the starting speed: three strokes reach the
+        // ceiling exactly, and a fourth is wasted. Both values stay editable in the Inspector.
+        private const float HorseMaximumSpeed = 8f;
+        private const float HorseStartingSpeed = 3.5f;
+        private const float WhipStrokesToFullSpeed = 3f;
+        private const float WhipAccelerationPerStroke =
+            (HorseMaximumSpeed - HorseStartingSpeed) / WhipStrokesToFullSpeed;
         private const float WhipCoastingDeceleration = 0.20f;
 
         /// <summary>Set by the command line entry points so dialogs never block an automated run.</summary>
@@ -138,7 +190,11 @@ namespace JapaneseDemonHunter.GameplayEditor
             Material kingdomMaterial = GetOrCreateLitMaterial("Kingdom_Stone", new Color(0.22f, 0.21f, 0.25f));
             Material kingdomRoofMaterial = GetOrCreateLitMaterial("Kingdom_Roof", new Color(0.12f, 0.05f, 0.05f));
             Material nightSky = GetOrCreateNightSky("Sky_Night");
-            Material ropeMaterial = AssetDatabase.LoadAssetAtPath<Material>(RopeMaterialPath);
+            Material ropeMaterial = GetOrCreateRopeMaterial();
+            Material gripMaterial = GetOrCreateLitMaterial("Mat_ReinGrip", new Color(0.42f, 0.24f, 0.15f));
+            Material wagonBody = GetOrCreateLitMaterial("Mat_Wagon_Body", new Color(0.32f, 0.20f, 0.12f));
+            Material wagonHardware = GetOrCreateLitMaterial("Mat_Wagon_Hardware", new Color(0.30f, 0.30f, 0.33f));
+            SetFloat(wagonHardware, "_Metallic", 0.9f);
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             scene.name = "JapanDemonHunter";
@@ -152,6 +208,7 @@ namespace JapaneseDemonHunter.GameplayEditor
 
             GameObject carriage = InstantiatePrefab(CarriagePrefabPath, vehicleRoot.transform, Vector3.zero);
             AddRealHorses(carriage.transform, motor, out Transform leftHorseHead, out Transform rightHorseHead);
+            GameObject wagon = AddRealWagon(carriage.transform, wagonBody, wagonHardware);
             if (leftHorseHead == null)
             {
                 leftHorseHead = FindChild(carriage.transform, "HorsePlaceholders/Horse_Left/Horse_Head");
@@ -164,25 +221,32 @@ namespace JapaneseDemonHunter.GameplayEditor
 
             Transform rearAnchor = FindChild(carriage.transform, "RopeAnchors/Anchor_CarriageRear");
 
-            List<PrototypeCandle> candleLamps = CreateCarriageLamps(vehicleRoot.transform, lampMaterial);
+            List<PrototypeCandle> candleLamps = CreateCarriageLamps(vehicleRoot.transform, lampMaterial, wagon);
 
             GameObject roadRoot = CreateRoadRoot(vehicleRoot.transform, nightSky);
             ForestRoad road = roadRoot.GetComponent<ForestRoad>();
 
+            // The road is a raised causeway: the flat ground plane sits below it and the carriageway
+            // rises above. CarriageMotor aligns the cart against whichever position the root starts at,
+            // so an origin at y=0 makes the whole carriage travel under the road surface; starting at
+            // the road's own height puts the wheels, the hooves and the player rig back on top of it.
+            float roadStartHeight = road.CreatePathModel().HeightAtDistance(0f);
+            vehicleRoot.transform.position = new Vector3(0f, roadStartHeight, 0f);
+
             CreateGround(vehicleRoot.transform);
 
             ReinHandle leftRein = CreateRein(
-                vehicleRoot.transform, "Left_ReinPin", LeftReinRest, 0);
+                vehicleRoot.transform, "Left_ReinPin", LeftReinRest, 0, gripMaterial);
             ReinHandle rightRein = CreateRein(
-                vehicleRoot.transform, "Right_ReinPin", RightReinRest, 1);
+                vehicleRoot.transform, "Right_ReinPin", RightReinRest, 1, gripMaterial);
             CreateClosedReinLoop(vehicleRoot.transform, leftRein, rightRein, leftHorseHead, rightHorseHead, ropeMaterial);
             WireObject(motor, "leftRein", leftRein);
             WireObject(motor, "rightRein", rightRein);
-            SetFloat(motor, "minimumLoadSpeedMultiplier", 0f);
+            SetFloat(motor, "minimumLoadSpeedMultiplier", 0.3f);
             SetFloat(motor, "maximumYawRate", 25f);
             SetBool(motor, "followRoadCurvature", true);
-            SetFloat(motor, "maximumSpeed", 5f);
-            SetFloat(motor, "startingSpeed", 3.5f);
+            SetFloat(motor, "maximumSpeed", HorseMaximumSpeed);
+            SetFloat(motor, "startingSpeed", HorseStartingSpeed);
             SetFloat(motor, "accelerationPerStroke", WhipAccelerationPerStroke);
             SetFloat(motor, "brakingPerPull", 0.9f);
             SetFloat(motor, "coastingDeceleration", WhipCoastingDeceleration);
@@ -208,6 +272,10 @@ namespace JapaneseDemonHunter.GameplayEditor
             victory.Configure(road, motor, spawner, giantSpawner);
             victory.ConfigurePresentation(victoryBanner, kingdomLights);
             CreateDefeatEffect(giantSpawner, centerEye, overlayMaterial);
+
+            // The ambience is what actually drives the lamp look at runtime, including the slow flame
+            // pulse. It is wired last, once the victory and session controllers exist to be referenced.
+            WireCarriageLampAmbience(vehicleRoot);
 
             EditorSceneManager.MarkSceneDirty(scene);
             if (!EditorSceneManager.SaveScene(scene, ScenePath))
@@ -363,13 +431,17 @@ namespace JapaneseDemonHunter.GameplayEditor
         private static void ConfigureEnvironment(Material nightSky)
         {
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.030f, 0.038f, 0.060f);
+            // Near-neutral and a touch darker than before. The old ambient was blue, which tinted the
+            // whole world and left the dirt road and the forest edge the same colour; keeping it neutral
+            // lets each surface hold its own hue now that the lanterns carry most of the lighting.
+            RenderSettings.ambientLight = new Color(0.025f, 0.028f, 0.024f);
             RenderSettings.skybox = nightSky;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.012f, 0.016f, 0.026f);
-            RenderSettings.fogStartDistance = 14f;
-            RenderSettings.fogEndDistance = 85f;
+            RenderSettings.fogColor = new Color(0.013f, 0.014f, 0.015f);
+            RenderSettings.fogStartDistance = 12f;
+            // Pulled in a little so the far end of the road fades out instead of opening onto bare ground.
+            RenderSettings.fogEndDistance = 78f;
         }
 
         private static void CreateMoonlight()
@@ -378,8 +450,10 @@ namespace JapaneseDemonHunter.GameplayEditor
             moonObject.transform.rotation = Quaternion.Euler(38f, -32f, 0f);
             Light moon = moonObject.AddComponent<Light>();
             moon.type = LightType.Directional;
-            moon.color = new Color(0.42f, 0.50f, 0.74f);
-            moon.intensity = 0.45f;
+            // A paler, brighter looking moon whose light was turned down: the disk in the sky reads
+            // brighter while the ground it touches stays properly dark.
+            moon.color = new Color(0.62f, 0.68f, 0.86f);
+            moon.intensity = 0.34f;
             moon.shadows = LightShadows.Soft;
             RenderSettings.sun = moon;
         }
@@ -409,10 +483,126 @@ namespace JapaneseDemonHunter.GameplayEditor
                 return;
             }
 
-            HidePlaceholder(carriage, "HorsePlaceholders/Horse_Left/Horse_Body");
-            HidePlaceholder(carriage, "HorsePlaceholders/Horse_Right/Horse_Body");
+            HidePlaceholder(carriage, "HorsePlaceholders");
+            HidePlaceholder(carriage, "CarriageFloor");
+            HidePlaceholder(carriage, "CarriageWalls");
+            HidePlaceholder(carriage, "CarriageWheels");
+            HidePlaceholder(carriage, "Shafts");
             leftHead = AddHorse(carriage, "HorsePlaceholders/Horse_Left", horseModel, "Horse_Model_Left", speedSource);
             rightHead = AddHorse(carriage, "HorsePlaceholders/Horse_Right", horseModel, "Horse_Model_Right", speedSource);
+        }
+
+        /// <summary>
+        /// Replaces the block-built carriage with the real wagon model. The GameObjects of the old
+        /// prototype are only hidden, never deleted: the rein anchors, the monster rear anchor and
+        /// the horse clearance logic still read their transforms and colliders. Returns the instance
+        /// so the lamps can be seated on its rails.
+        /// </summary>
+        private static GameObject AddRealWagon(Transform carriage, Material bodyMaterial, Material hardwareMaterial)
+        {
+            GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(WagonModelPath);
+            if (model == null)
+            {
+                Debug.LogWarning($"Wagon model not found at {WagonModelPath}: the prototype carriage stays visible.");
+                return null;
+            }
+
+            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(model);
+            instance.name = "Wagon_Model";
+            instance.transform.SetParent(carriage, false);
+            instance.transform.localPosition = Vector3.zero;
+            // The obj is modelled with its length along its own X and its wheel axles along Z, so it
+            // is turned a quarter turn before anything is measured: the bounds below are taken after
+            // the turn, which makes size.x the width and size.z the length.
+            instance.transform.localRotation = Quaternion.Euler(0f, WagonYawDegrees, 0f);
+            instance.transform.localScale = Vector3.one;
+            ApplyWagonMaterials(instance, bodyMaterial, hardwareMaterial);
+
+            Transform floor = FindChild(carriage, "CarriageFloor");
+            Transform leftHorse = FindChild(carriage, "HorsePlaceholders/Horse_Left/Horse_Model_Left");
+            Transform rightHorse = FindChild(carriage, "HorsePlaceholders/Horse_Right/Horse_Model_Right");
+
+            if (!TryGetRendererBounds(instance, out Bounds bounds) || bounds.size.x <= 0.0001f)
+            {
+                Debug.LogWarning("Wagon model has no usable renderer bounds; it was left unadjusted.");
+                return instance;
+            }
+
+            // The bed is sized to the real horses rather than to a fixed number, so it always clears
+            // the pair instead of leaving them wider than the cart they are harnessed to.
+            float targetWidth = 0f;
+            if (TryGetCombinedBounds(leftHorse, rightHorse, out Bounds horseBounds))
+            {
+                targetWidth = horseBounds.size.x + WagonWidthMargin;
+            }
+            else if (floor != null && TryGetRendererBounds(floor.gameObject, out Bounds floorBounds))
+            {
+                targetWidth = floorBounds.size.x * WagonDeckWidthScale;
+            }
+
+            if (targetWidth > 0.0001f)
+            {
+                instance.transform.localScale = Vector3.one *
+                    (targetWidth / bounds.size.x * Mathf.Max(0.01f, WagonSizeMultiplier));
+            }
+
+            if (!TryGetRendererBounds(instance, out bounds))
+            {
+                return instance;
+            }
+
+            // Wheels on the road surface, which is this object's own origin, and the front of the bed
+            // just clear of the horses' hindquarters. The carriage travels towards -Z, so the horses
+            // sit at negative Z and the bed has to run forward to meet them.
+            instance.transform.position += new Vector3(
+                -bounds.center.x, -bounds.min.y, 0f);
+            if (TryGetCombinedBounds(leftHorse, rightHorse, out horseBounds) &&
+                TryGetRendererBounds(instance, out bounds))
+            {
+                instance.transform.position += new Vector3(
+                    0f, 0f, horseBounds.max.z + WagonHorseClearance - bounds.min.z);
+            }
+
+            return instance;
+        }
+
+        private static void ApplyWagonMaterials(GameObject wagon, Material body, Material hardware)
+        {
+            var renderers = new List<Renderer>(wagon.GetComponentsInChildren<Renderer>(true));
+            var materials = new List<Material>();
+            var fallback = body;
+            bool anyHardware = false;
+
+            for (var i = 0; i < renderers.Count; i++)
+            {
+                materials.Clear();
+                var shared = renderers[i].sharedMaterials;
+                for (var m = 0; m < shared.Length; m++)
+                {
+                    // The source obj ships without its mtl, so the slot names are Maya leftovers
+                    // rather than an agreed palette. Match loosely and fall back to the wood body.
+                    string slotName = shared[m] != null ? shared[m].name : string.Empty;
+                    if (slotName.IndexOf("blinn2", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        materials.Add(hardware);
+                        anyHardware = true;
+                    }
+                    else
+                    {
+                        materials.Add(fallback);
+                    }
+                }
+
+                if (materials.Count > 0)
+                {
+                    renderers[i].sharedMaterials = materials.ToArray();
+                }
+            }
+
+            if (!anyHardware)
+            {
+                Debug.Log("Wagon model exposed no hardware material slot; every renderer uses the body material.");
+            }
         }
 
         private static void HidePlaceholder(Transform carriage, string path)
@@ -423,6 +613,8 @@ namespace JapaneseDemonHunter.GameplayEditor
                 return;
             }
 
+            // Hide the whole subtree: targeting individual child names previously left the old
+            // horse head cubes visible next to the real horse models.
             foreach (Renderer renderer in placeholder.GetComponentsInChildren<Renderer>(true))
             {
                 renderer.enabled = false;
@@ -478,8 +670,26 @@ namespace JapaneseDemonHunter.GameplayEditor
                 if (overlap > 0f) instance.transform.position += Vector3.back * overlap;
             }
 
-            HorseLocomotionDriver driver = instance.AddComponent<HorseLocomotionDriver>();
-            driver.Configure(speedSource, instance.transform, 0.15f, 3.2f, 2.4f);
+            Animator animator = instance.GetComponent<Animator>();
+            if (animator == null)
+            {
+                animator = instance.AddComponent<Animator>();
+            }
+
+            RuntimeAnimatorController controller = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(HorseControllerPath);
+            if (controller != null)
+            {
+                animator.runtimeAnimatorController = controller;
+            }
+            else
+            {
+                Debug.LogWarning(
+                    $"Horse controller not found at {HorseControllerPath}. Run Tools/Game/Setup Horse Import " +
+                    "to import the fbx clips and build the state machine; the horse will idle until then.");
+            }
+
+            HorseAnimationDriver driver = instance.AddComponent<HorseAnimationDriver>();
+            driver.Configure(speedSource, animator);
             return CreateHeadAnchor(instance, parent);
         }
 
@@ -495,27 +705,68 @@ namespace JapaneseDemonHunter.GameplayEditor
             float headZ = Mathf.Min(localMin.z, localMax.z);
             float depth = Mathf.Abs(localMax.z - localMin.z);
             float headY = Mathf.Lerp(localMin.y, localMax.y, 0.88f);
-            var parentLocal = new Vector3(
+            var headLocal = new Vector3(
                 (localMin.x + localMax.x) * 0.5f, headY, headZ + depth * 0.12f);
 
-            // Parent the anchor to the horse itself so it follows the procedural gait instead of
+            // Parent the anchor to the horse itself so it follows the gait animation instead of
             // staying pinned while the head bobs.
             Transform anchor = CreateChild(horse.transform, "ReinHeadAnchor", Vector3.zero);
-            anchor.position = parent.TransformPoint(parentLocal);
-            return anchor;
+            anchor.position = parent.TransformPoint(headLocal);
+
+            // The rein ends where the collar sits, not at the muzzle. Pinning the loop a little
+            // back and low makes the rope visually enter the horse instead of stopping in mid air.
+            var collarLocal = new Vector3(headLocal.x, headY - ReinCollarDrop, headZ + depth * 0.34f);
+            Transform collar = CreateChild(horse.transform, "ReinCollarAnchor", Vector3.zero);
+            collar.position = parent.TransformPoint(collarLocal);
+            return collar;
         }
 
+        /// <summary>
+        /// The four carriage lamps. Their corners come from the wagon's own bounds so they always sit
+        /// on the rails of whatever model is fitted; hand-placed offsets left them floating once the
+        /// block carriage was replaced.
+        /// </summary>
         private static List<PrototypeCandle> CreateCarriageLamps(
-            Transform vehicleRoot, Material lampMaterial)
+            Transform vehicleRoot, Material lampMaterial, GameObject wagon)
+        {
+            if (wagon == null || !TryGetRendererBounds(wagon, out Bounds bed))
+            {
+                Debug.LogWarning(
+                    "The wagon has no measurable bounds, so the carriage lamps fell back to the " +
+                    "prototype positions and may not sit on the bed.");
+                return CreateCarriageLampsAt(vehicleRoot, lampMaterial,
+                    new Vector3(-1.28f, 1.55f, -2.30f), new Vector3(1.28f, 1.55f, -2.30f),
+                    new Vector3(-1.05f, 1.45f, 1.75f), new Vector3(1.05f, 1.45f, 1.75f));
+            }
+
+            float x = Mathf.Max(0.05f, bed.extents.x - LampCornerInset);
+            float frontZ = bed.min.z + LampCornerInset;
+            float rearZ = bed.max.z - LampCornerInset;
+            float railY = bed.max.y;
+
+            return CreateCarriageLampsAt(vehicleRoot, lampMaterial,
+                vehicleRoot.InverseTransformPoint(new Vector3(-x, railY, frontZ)),
+                vehicleRoot.InverseTransformPoint(new Vector3(x, railY, frontZ)),
+                vehicleRoot.InverseTransformPoint(new Vector3(-x, railY, rearZ)),
+                vehicleRoot.InverseTransformPoint(new Vector3(x, railY, rearZ)));
+        }
+
+        private static List<PrototypeCandle> CreateCarriageLampsAt(
+            Transform vehicleRoot,
+            Material lampMaterial,
+            Vector3 frontLeft,
+            Vector3 frontRight,
+            Vector3 rearLeft,
+            Vector3 rearRight)
         {
             var candles = new List<PrototypeCandle>
             {
-                CreateCandleLamp(vehicleRoot, "Lamp_FrontLeft", new Vector3(-1.28f, 1.55f, -2.30f), lampMaterial),
-                CreateCandleLamp(vehicleRoot, "Lamp_FrontRight", new Vector3(1.28f, 1.55f, -2.30f), lampMaterial)
+                CreateCandleLamp(vehicleRoot, "Lamp_FrontLeft", frontLeft, lampMaterial),
+                CreateCandleLamp(vehicleRoot, "Lamp_FrontRight", frontRight, lampMaterial)
             };
 
-            CreateSimpleLamp(vehicleRoot, "Lamp_RearLeft", new Vector3(-1.05f, 1.45f, 1.75f), lampMaterial);
-            CreateSimpleLamp(vehicleRoot, "Lamp_RearRight", new Vector3(1.05f, 1.45f, 1.75f), lampMaterial);
+            CreateSimpleLamp(vehicleRoot, "Lamp_RearLeft", rearLeft, lampMaterial);
+            CreateSimpleLamp(vehicleRoot, "Lamp_RearRight", rearRight, lampMaterial);
             return candles;
         }
 
@@ -523,12 +774,9 @@ namespace JapaneseDemonHunter.GameplayEditor
             Transform parent, string name, Vector3 localPosition, Material lampMaterial)
         {
             GameObject root = CreateChild(parent, name, localPosition).gameObject;
-            CreatePrimitive(PrimitiveType.Cylinder, "LampBody", root.transform,
-                new Vector3(0f, 0.16f, 0f), new Vector3(0.06f, 0.16f, 0.06f), lampMaterial);
-            GameObject flame = CreatePrimitive(PrimitiveType.Sphere, "Flame", root.transform,
-                new Vector3(0f, 0.40f, 0f), new Vector3(0.20f, 0.26f, 0.20f), lampMaterial);
-            Object.DestroyImmediate(flame.GetComponent<Collider>());
-            Light light = AddPointLight(flame.transform, new Color(1f, 0.55f, 0.18f), 2.6f, 13f);
+            GameObject flame = AddStandingLanternVisual(root.transform, lampMaterial);
+            Light light = AddPointLight(
+                flame.transform, LanternFlameColor, LanternFrontIntensity, LanternFrontRange);
 
             Transform attackPoint = CreateChild(root.transform, "AttackPoint", new Vector3(0f, 0.7f, 0f));
             PrototypeCandle candle = root.AddComponent<PrototypeCandle>();
@@ -540,12 +788,45 @@ namespace JapaneseDemonHunter.GameplayEditor
             Transform parent, string name, Vector3 localPosition, Material lampMaterial)
         {
             GameObject root = CreateChild(parent, name, localPosition).gameObject;
-            CreatePrimitive(PrimitiveType.Cylinder, "LampBody", root.transform,
-                new Vector3(0f, 0.14f, 0f), new Vector3(0.05f, 0.14f, 0.05f), lampMaterial);
-            GameObject glass = CreatePrimitive(PrimitiveType.Sphere, "Glass", root.transform,
-                new Vector3(0f, 0.34f, 0f), new Vector3(0.17f, 0.22f, 0.17f), lampMaterial);
-            Object.DestroyImmediate(glass.GetComponent<Collider>());
-            AddPointLight(glass.transform, new Color(1f, 0.58f, 0.22f), 2.2f, 12f);
+            GameObject glass = AddStandingLanternVisual(root.transform, lampMaterial);
+            AddPointLight(glass.transform, LanternFlameColor, LanternRearIntensity, LanternRearRange);
+        }
+
+        /// <summary>
+        /// The standing lantern model with the flame that burns inside it, returned so the lit state and
+        /// the slow pulse drive that piece. The lantern body itself always stays in place, so putting a
+        /// lamp out hides its flame instead of deleting the lamp.
+        /// </summary>
+        private static GameObject AddStandingLanternVisual(Transform parent, Material lampMaterial)
+        {
+            GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(LanternStandingModelPath);
+            if (model != null)
+            {
+                GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(model);
+                instance.name = "Lantern_Model";
+                instance.transform.SetParent(parent, false);
+                instance.transform.localPosition = Vector3.zero;
+                instance.transform.localRotation = Quaternion.identity;
+                instance.transform.localScale = Vector3.one;
+                if (TryGetRendererBounds(instance, out Bounds bounds) && bounds.size.y > 0.0001f)
+                {
+                    instance.transform.localScale = Vector3.one * (LanternStandingHeight / bounds.size.y);
+                }
+            }
+            else
+            {
+                Debug.LogWarning(
+                    $"Lantern model not found at {LanternStandingModelPath}: the carriage lamps fall " +
+                    "back to a block body.");
+                CreatePrimitive(PrimitiveType.Cylinder, "LampBody", parent,
+                    new Vector3(0f, 0.16f, 0f), new Vector3(0.06f, 0.16f, 0.06f), lampMaterial);
+            }
+
+            GameObject flame = CreatePrimitive(PrimitiveType.Sphere, "Flame", parent,
+                new Vector3(0f, LanternStandingHeight * LanternFlameHeight, 0f),
+                new Vector3(0.15f, 0.19f, 0.15f), lampMaterial);
+            Object.DestroyImmediate(flame.GetComponent<Collider>());
+            return flame;
         }
 
         // ---------------------------------------------------------------- reins
@@ -555,7 +836,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             Transform vehicleRoot,
             string pinName,
             Vector3 restLocalPosition,
-            int handedness)
+            int handedness,
+            Material gripMaterial)
         {
             GameObject handle = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, restLocalPosition);
             handle.name = pinName.Replace("Pin", "Handle");
@@ -581,6 +863,14 @@ namespace JapaneseDemonHunter.GameplayEditor
             {
                 body.isKinematic = true;
                 body.useGravity = false;
+            }
+
+            if (gripMaterial != null)
+            {
+                foreach (Renderer renderer in handle.GetComponentsInChildren<Renderer>(true))
+                {
+                    renderer.sharedMaterial = gripMaterial;
+                }
             }
 
             Grabbable grabbable = handle.GetComponent<Grabbable>();
@@ -613,8 +903,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             LineRenderer line = loopObject.AddComponent<LineRenderer>();
             line.useWorldSpace = false;
             line.loop = true;
-            line.positionCount = 32;
-            line.widthMultiplier = 0.025f;
+            line.positionCount = 48;
+            line.widthMultiplier = 0.035f;
             line.numCapVertices = 4;
             if (ropeMaterial != null)
             {
@@ -652,6 +942,92 @@ namespace JapaneseDemonHunter.GameplayEditor
             WireObject(motor, "accelerateClip", AssetDatabase.LoadAssetAtPath<AudioClip>(AccelerateClipPath));
             WireObject(motor, "brakeClip", AssetDatabase.LoadAssetAtPath<AudioClip>(BrakeClipPath));
             WireObject(motor, "laneClip", AssetDatabase.LoadAssetAtPath<AudioClip>(LaneClipPath));
+        }
+
+        /// <summary>Wires the existing four carriage lamps without creating or replacing lights.</summary>
+        [MenuItem("Tools/Game/Integrate Existing Carriage Lamps")]
+        public static void IntegrateExistingCarriageLamps()
+        {
+            Scene activeScene = SceneManager.GetActiveScene();
+            if (activeScene.path != ScenePath)
+            {
+                Debug.LogWarning($"Open {ScenePath} before integrating its existing carriage lamps.");
+                return;
+            }
+
+            GameObject vehicle = GameObject.Find("VehicleRoot");
+            if (vehicle == null)
+            {
+                Debug.LogWarning("VehicleRoot was not found; no lamp objects were changed.");
+                return;
+            }
+
+            if (!WireCarriageLampAmbience(vehicle))
+            {
+                return;
+            }
+
+            EditorSceneManager.MarkSceneDirty(activeScene);
+            if (!EditorSceneManager.SaveScene(activeScene, ScenePath))
+                throw new System.InvalidOperationException($"Unity could not save {ScenePath}.");
+            Debug.Log("Wired the existing front/rear carriage lamps; no light sources were created.");
+        }
+
+        /// <summary>
+        /// Puts the four carriage lamps under the ambience component, which gives them their warm
+        /// colour and the slow breathing of a flame. Returns false when a lamp or its light is missing.
+        /// </summary>
+        private static bool WireCarriageLampAmbience(GameObject vehicle)
+        {
+            Transform frontLeft = FindChild(vehicle.transform, "Lamp_FrontLeft");
+            Transform frontRight = FindChild(vehicle.transform, "Lamp_FrontRight");
+            Transform rearLeft = FindChild(vehicle.transform, "Lamp_RearLeft");
+            Transform rearRight = FindChild(vehicle.transform, "Lamp_RearRight");
+            if (frontLeft == null || frontRight == null || rearLeft == null || rearRight == null)
+            {
+                Debug.LogWarning("One or more existing carriage lamp objects are missing; no lamp integration was applied.");
+                return false;
+            }
+
+            Light[] frontLights = { FindChild(frontLeft, "Flame/Light")?.GetComponent<Light>(),
+                                    FindChild(frontRight, "Flame/Light")?.GetComponent<Light>() };
+            // Both lamp kinds carry the same flame piece now that they share the standing lantern model.
+            Light[] rearLights = { FindChild(rearLeft, "Flame/Light")?.GetComponent<Light>(),
+                                   FindChild(rearRight, "Flame/Light")?.GetComponent<Light>() };
+            PrototypeCandle[] candles = { frontLeft != null ? frontLeft.GetComponent<PrototypeCandle>() : null,
+                                          frontRight != null ? frontRight.GetComponent<PrototypeCandle>() : null };
+
+            for (int index = 0; index < 2; index++)
+            {
+                if (frontLights[index] == null || candles[index] == null || rearLights[index] == null)
+                {
+                    Debug.LogWarning("Expected front candle and four existing carriage Light components; " +
+                                     "lamp integration was not applied.");
+                    return false;
+                }
+            }
+
+            CarriageLampAmbience ambience = vehicle.GetComponent<CarriageLampAmbience>();
+            if (ambience == null) ambience = vehicle.AddComponent<CarriageLampAmbience>();
+            ambience.Configure(frontLights, rearLights, candles,
+                vehicle.GetComponent<CarriageMotor>(), Object.FindAnyObjectByType<LevelVictoryController>(),
+                Object.FindAnyObjectByType<GameSessionController>());
+
+            // The ambience owns the lamp look at runtime, so its tuning is set here rather than left at
+            // the script defaults: these are the values the darker night was balanced against.
+            SetColor(ambience, "frontColor", LanternFlameColor);
+            SetColor(ambience, "rearColor", LanternFlameColor);
+            SetFloat(ambience, "frontIntensity", LanternFrontIntensity);
+            SetFloat(ambience, "frontRange", LanternFrontRange);
+            SetFloat(ambience, "rearIntensity", LanternRearIntensity);
+            SetFloat(ambience, "rearRange", LanternRearRange);
+            SetFloat(ambience, "gallopCueStartSpeed", LanternGallopCueStartSpeed);
+            SetFloat(ambience, "gallopCueMaximumSpeed", LanternGallopCueMaximumSpeed);
+            SetFloat(ambience, "gallopIntensityBoost", LanternGallopIntensityBoost);
+            SetFloat(ambience, "modulationAmplitude", LanternPulseAmplitude);
+            SetFloat(ambience, "modulationFrequency", LanternPulseFrequency);
+            EditorUtility.SetDirty(ambience);
+            return true;
         }
 
         /// <summary>Applies the new atmosphere to the existing scene without regenerating it.</summary>
@@ -729,9 +1105,9 @@ namespace JapaneseDemonHunter.GameplayEditor
 
         private static void MoveAttachmentPointsBehindCart(Transform vehicle)
         {
-            GameObject floor = GameObject.Find("CarriageFloor");
-            if (floor == null || !TryGetRendererBounds(floor, out Bounds bounds)) return;
-            float rearZ = vehicle.InverseTransformPoint(bounds.max).z + 0.8f;
+            // Measured against the wagon, not the block deck: the deck is far shorter than the real
+            // carriage, so using it left the attachment points buried inside the cart.
+            float rearZ = GetCartRearLocalZ(vehicle) + 0.45f;
             foreach (string name in new[] { "Attach_RearCenter", "Attach_LeftRear", "Attach_RightRear",
                                           "Attach_LeftFront", "Attach_RightFront" })
             {
@@ -1285,13 +1661,26 @@ namespace JapaneseDemonHunter.GameplayEditor
             SetFloat(road, "heightAmplitude", 0.55f);
             SetFloat(road, "heightWavelength", 90f);
             SetFloat(road, "forkDivergence", 6f);
-            SetInt(road, "forestRows", 3);
-            SetInt(road, "treesPerRow", 5);
+            // A dense wall of real tree models on both sides. Six per row covers the whole tile length
+            // with no seam, and four rows at 5.5 m reach past the fog's start so the only open ground
+            // left in view is the carriageway itself.
+            SetInt(road, "forestRows", 4);
+            SetInt(road, "treesPerRow", 6);
+            SetFloat(road, "forestRowSpacing", 5.5f);
             SetInt(road, "totalTiles", TotalRoadTiles);
             WireObject(road, "vehicleRoot", vehicleRoot);
             WireObject(road, "rockPrefab", AssetDatabase.LoadAssetAtPath<GameObject>(RockModelPath));
             SetObjectArray(road, "treePrefabs", LoadAssets(TreeModelPaths));
-            SetFloat(road, "treeHeight", 7.5f);
+            SetFloat(road, "treeHeight", 11f);
+            // A lit post on each side of the carriageway, recycled with the tiles and only switched on
+            // around the carriage so the road is lit without paying for a strip of lights down 700 m.
+            WireObject(road, "postLanternPrefab", AssetDatabase.LoadAssetAtPath<GameObject>(PostLanternModelPath));
+            SetFloat(road, "postLanternSpacing", PostLanternSpacing);
+            SetFloat(road, "postLanternOffset", PostLanternOffset);
+            SetFloat(road, "postLanternHeight", PostLanternHeight);
+            SetColor(road, "postLanternColor", PostLanternColor);
+            SetFloat(road, "postLanternIntensity", PostLanternIntensity);
+            SetFloat(road, "postLanternRange", PostLanternRange);
             return roadRoot;
         }
 
@@ -1299,11 +1688,18 @@ namespace JapaneseDemonHunter.GameplayEditor
         {
             GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
+            // A forest floor rather than Unity's default grey: with that grey plane behind it the dirt
+            // carriageway had nothing to stand out against and read as part of the same surface.
+            ground.GetComponent<Renderer>().sharedMaterial =
+                GetOrCreateLitMaterial("Mat_ForestFloor", new Color(0.07f, 0.15f, 0.06f));
             ground.transform.localScale = new Vector3(60f, 1f, 60f);
-            ground.transform.position = new Vector3(0f, -0.01f, 0f);
+            // Seated at the carriage's own height so the edit-time scene view agrees with where
+            // CartFollowGround puts it at runtime; otherwise the carriage reads as floating here.
+            var localOffset = new Vector3(0f, -0.01f, 0f);
+            ground.transform.position = vehicleRoot.position + localOffset;
             ground.AddComponent<MonsterGroundSurface>();
             CartFollowGround follow = ground.AddComponent<CartFollowGround>();
-            follow.Configure(vehicleRoot, new Vector3(0f, -0.01f, 0f));
+            follow.Configure(vehicleRoot, localOffset);
         }
 
         // ---------------------------------------------------------------- VR rig
@@ -1324,6 +1720,7 @@ namespace JapaneseDemonHunter.GameplayEditor
 
             ConfigureOvrManager(rig);
             OVRQuickActionsAPI.AddOVRInteractionRig(false);
+            DisableArtificialLocomotion();
 
             Camera centerEye = FindCenterEyeCamera(rig);
             if (centerEye == null)
@@ -1336,6 +1733,32 @@ namespace JapaneseDemonHunter.GameplayEditor
             }
 
             return centerEye;
+        }
+
+        /// <summary>
+        /// Turns off the interaction rig's free-movement locomotor. It is wired with the VehicleRoot as
+        /// its player origin, so whenever the bare player rig "falls" — which is what happens with no
+        /// floor to stand on in the editor — it drags the whole carriage down with it, sinking the cart
+        /// through the road over a couple of minutes. The hunter rides the cart, so there is no artificial
+        /// locomotion to drive here and the rig rule is that the origin is never moved. Disabled, not
+        /// removed, so it can be switched back on from the Inspector.
+        /// </summary>
+        private static void DisableArtificialLocomotion()
+        {
+            foreach (MonoBehaviour behaviour in Object.FindObjectsByType<MonoBehaviour>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (behaviour == null || behaviour.GetType().Name != "FirstPersonLocomotor")
+                {
+                    continue;
+                }
+
+                behaviour.enabled = false;
+                EditorUtility.SetDirty(behaviour);
+                Debug.Log(
+                    "Disabled the interaction rig's FirstPersonLocomotor: it moved the player origin, " +
+                    "which is the carriage root, and sank the cart through the road.");
+            }
         }
 
         private static void ConfigureOvrManager(GameObject rig)
@@ -1394,7 +1817,12 @@ namespace JapaneseDemonHunter.GameplayEditor
 
         private static void CreateKnife(Transform vehicleRoot)
         {
-            GameObject knife = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, new Vector3(0.6f, 0.74f, -0.12f));
+            // Resting on the bed, just ahead and to the right of where the hunter stands. The old
+            // fixed height was below the real wagon's floor once it was fitted, so the knife sat
+            // buried inside the boards and read as missing.
+            float bedFloor = GetWagonBedFloorLocalY(vehicleRoot);
+            var restPosition = new Vector3(0.55f, bedFloor + 0.07f, -0.45f);
+            GameObject knife = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, restPosition);
             knife.name = "Knife";
             // The rope grip prefab is squashed (0.04, 0.2, 0.04), which would distort any model
             // parented under it. It is normalised here and given a knife shaped grab volume instead.
@@ -1509,7 +1937,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             attachmentPoints.Configure(CreateAttachmentPoints(vehicleRoot));
 
             CartMonsterLoad cartLoad = systemObject.AddComponent<CartMonsterLoad>();
-            cartLoad.Configure(60f, 0f, vehicleRoot.GetComponent<CarriageMotor>());
+            cartLoad.Configure(60f, 0.3f, vehicleRoot.GetComponent<CarriageMotor>());
 
             MonsterSpawner spawner = systemObject.AddComponent<MonsterSpawner>();
             spawner.Configure(
@@ -1523,7 +1951,7 @@ namespace JapaneseDemonHunter.GameplayEditor
                         prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ZombiePrefabPath),
                         movementType = MonsterMovementType.Ground,
                         weight = 1f,
-                        attachmentLoad = 20f,
+                        attachmentLoad = 15f,
                         overrideTargetStrategy = true,
                         targetStrategy = MonsterTargetStrategy.PrioritizeHunter
                     },
@@ -1531,10 +1959,13 @@ namespace JapaneseDemonHunter.GameplayEditor
                     {
                         prefab = AssetDatabase.LoadAssetAtPath<GameObject>(BatPrefabPath),
                         movementType = MonsterMovementType.Flying,
+                        spawnDirection = MonsterSpawnDirection.FrontLane,
+                        isFaceThreat = true,
+                        frontLaneForwardRadius = 12f,
                         weight = 1f,
                         minimumFlyingHeight = 3.5f,
                         maximumFlyingHeight = 7f,
-                        attachmentLoad = 20f,
+                        attachmentLoad = 0f,
                         overrideTargetStrategy = true,
                         targetStrategy = MonsterTargetStrategy.PrioritizeHunter
                     }
@@ -1544,6 +1975,10 @@ namespace JapaneseDemonHunter.GameplayEditor
                 attachmentPoints,
                 cartLoad,
                 hunterTarget);
+            WireObject(spawner, "rearReachPoint", rearAnchor);
+            FaceBatThreatController faceThreat = systemObject.AddComponent<FaceBatThreatController>();
+            faceThreat.Configure(spawner, headAnchor);
+
             // The delay starts only after the first valid two-handed gallop.
             spawner.ConfigureFirstGallopSource(vehicleRoot.GetComponent<CarriageMotor>());
             spawner.ConfigureTiming(false, SecondsBeforeFirstMonster, MonsterSpawnInterval, true);
@@ -1569,18 +2004,63 @@ namespace JapaneseDemonHunter.GameplayEditor
 
         private static List<MonsterAttachmentPoint> CreateAttachmentPoints(Transform vehicleRoot)
         {
+            // The points used to be pinned to the block prototype's rear, which ended up inside the
+            // real wagon once it was fitted: attached monsters walked into the cart and jammed there.
+            // They are placed relative to the wagon's own rear edge so any change of size still
+            // leaves them hanging behind the carriage.
+            float rearZ = GetCartRearLocalZ(vehicleRoot);
+
             var points = new List<MonsterAttachmentPoint>();
             points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_RearCenter",
-                new Vector3(0f, 1.10f, 2.35f), MonsterAttachmentKind.Ground, 2));
+                new Vector3(0f, 1.10f, rearZ + 1.05f), MonsterAttachmentKind.Ground, 2));
             points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_LeftRear",
-                new Vector3(-1.15f, 1.00f, 1.55f), MonsterAttachmentKind.Ground, 1));
+                new Vector3(-1.60f, 1.00f, rearZ + 0.65f), MonsterAttachmentKind.Ground, 1));
             points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_RightRear",
-                new Vector3(1.15f, 1.00f, 1.55f), MonsterAttachmentKind.Ground, 1));
+                new Vector3(1.60f, 1.00f, rearZ + 0.65f), MonsterAttachmentKind.Ground, 1));
             points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_LeftRearFlying",
-                new Vector3(-1.35f, 1.75f, 2.6f), MonsterAttachmentKind.Flying, 1));
+                new Vector3(-1.85f, 1.75f, rearZ + 0.95f), MonsterAttachmentKind.Flying, 1));
             points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_RightRearFlying",
-                new Vector3(1.35f, 1.75f, 2.6f), MonsterAttachmentKind.Flying, 1));
+                new Vector3(1.85f, 1.75f, rearZ + 0.95f), MonsterAttachmentKind.Flying, 1));
             return points;
+        }
+
+        /// <summary>
+        /// Local Y of the wagon's bed floor, expressed under the vehicle root. The wheels take the
+        /// lower half of the model and the bed the upper half, so the floor sits at half its height;
+        /// deriving it keeps the loose props on the bed when the wagon's size changes.
+        /// </summary>
+        private static float GetWagonBedFloorLocalY(Transform vehicleRoot)
+        {
+            GameObject wagon = GameObject.Find("Wagon_Model");
+            if (wagon != null && TryGetRendererBounds(wagon, out Bounds bed))
+            {
+                return (bed.max.y - vehicleRoot.position.y) * 0.5f;
+            }
+
+            return 0.62f;
+        }
+
+        /// <summary>
+        /// Local Z of the carriage's rear edge, taken from the wagon that is actually fitted and
+        /// falling back to the block deck only when the model is missing.
+        /// </summary>
+        private static float GetCartRearLocalZ(Transform vehicleRoot)
+        {
+            GameObject wagon = GameObject.Find("Wagon_Model");
+            if (wagon != null && TryGetRendererBounds(wagon, out Bounds bed))
+            {
+                return vehicleRoot.InverseTransformPoint(
+                    new Vector3(vehicleRoot.position.x, vehicleRoot.position.y, bed.max.z)).z;
+            }
+
+            Transform floor = FindChild(vehicleRoot, "CarriagePrototype/CarriageFloor");
+            if (floor != null && TryGetRendererBounds(floor.gameObject, out Bounds floorBounds))
+            {
+                return vehicleRoot.InverseTransformPoint(
+                    new Vector3(vehicleRoot.position.x, vehicleRoot.position.y, floorBounds.max.z)).z;
+            }
+
+            return 1.7f;
         }
 
         private static MonsterAttachmentPoint CreateAttachmentPoint(
@@ -1740,6 +2220,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             Require(motor != null && motor.HasGestureAudio,
                 "The carriage has the whip audio wired so gesture detection is audible.", failures);
             ValidateHorses(failures);
+            ValidateKnife(failures);
+            ValidateCarriageLamps(failures);
 
             ReinHandle[] reins = Object.FindObjectsByType<ReinHandle>();
             Require(reins.Length == 2, "Two visible end grips exist on the continuous rein.", failures);
@@ -1929,6 +2411,33 @@ namespace JapaneseDemonHunter.GameplayEditor
             return light;
         }
 
+        /// <summary>Bounds of two objects taken together, used to size the bed against the real horses.</summary>
+        private static bool TryGetCombinedBounds(Transform first, Transform second, out Bounds bounds)
+        {
+            bounds = default;
+            var hasBounds = false;
+            if (first != null && TryGetRendererBounds(first.gameObject, out Bounds firstBounds))
+            {
+                bounds = firstBounds;
+                hasBounds = true;
+            }
+
+            if (second != null && TryGetRendererBounds(second.gameObject, out Bounds secondBounds))
+            {
+                if (hasBounds)
+                {
+                    bounds.Encapsulate(secondBounds);
+                }
+                else
+                {
+                    bounds = secondBounds;
+                    hasBounds = true;
+                }
+            }
+
+            return hasBounds;
+        }
+
         /// <summary>
         /// World-space bounds of every mesh under an object. Skinned meshes use
         /// <c>Renderer.bounds</c> (already in world units; the raw mesh is authored in centimetres),
@@ -2054,6 +2563,44 @@ namespace JapaneseDemonHunter.GameplayEditor
             return material;
         }
 
+        /// <summary>
+        /// The rein material is authored once and shared, so its look is re-asserted on every run
+        /// instead of only on creation. A rein is a plain beige rope: the previous red emissive
+        /// finish made it glow in the dark and read as a light source rather than leather.
+        /// </summary>
+        private static Material GetOrCreateRopeMaterial()
+        {
+            var beige = new Color(0.85f, 0.76f, 0.58f);
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(RopeMaterialPath);
+            if (material == null)
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                material = new Material(shader) { name = "Mat_RopeProxy" };
+                AssetDatabase.CreateAsset(material, RopeMaterialPath);
+            }
+
+            if (material.HasProperty("_BaseColor"))
+            {
+                material.SetColor("_BaseColor", beige);
+            }
+
+            material.color = beige;
+            if (material.HasProperty("_EmissionColor"))
+            {
+                material.SetColor("_EmissionColor", Color.black);
+            }
+
+            if (material.HasProperty("_Smoothness"))
+            {
+                material.SetFloat("_Smoothness", 0.15f);
+            }
+
+            material.DisableKeyword("_EMISSION");
+            material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
         private static Material GetOrCreateOverlayMaterial(string name, Color color)
         {
             string path = $"{GameMaterialFolder}/{name}.mat";
@@ -2091,10 +2638,6 @@ namespace JapaneseDemonHunter.GameplayEditor
         {
             string path = $"{GameMaterialFolder}/{name}.mat";
             Material existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (existing != null)
-            {
-                return existing;
-            }
 
             Shader shader = Shader.Find("Skybox/Procedural");
             if (shader == null)
@@ -2102,14 +2645,25 @@ namespace JapaneseDemonHunter.GameplayEditor
                 return null;
             }
 
-            var material = new Material(shader) { name = name };
-            material.SetColor("_SkyTint", new Color(0.035f, 0.050f, 0.105f));
-            material.SetColor("_GroundColor", new Color(0.010f, 0.012f, 0.020f));
+            // The look is re-asserted on every run rather than only when the asset is first created, so
+            // tuning the night does not require deleting the material by hand.
+            var material = existing != null ? existing : new Material(shader) { name = name };
+            // Darker and far less blue than before; the moon disk is made much larger and the exposure
+            // raised slightly, so the sky itself stays night-dark while the moon reads bright.
+            material.SetColor("_SkyTint", new Color(0.022f, 0.026f, 0.042f));
+            material.SetColor("_GroundColor", new Color(0.006f, 0.006f, 0.009f));
             material.SetFloat("_AtmosphereThickness", 0.75f);
-            material.SetFloat("_SunSize", 0.02f);
+            material.SetFloat("_SunSize", 0.075f);
             material.SetFloat("_SunSizeConvergence", 2f);
-            material.SetFloat("_Exposure", 0.55f);
-            AssetDatabase.CreateAsset(material, path);
+            material.SetFloat("_Exposure", 0.62f);
+            if (existing == null)
+            {
+                AssetDatabase.CreateAsset(material, path);
+            }
+            else
+            {
+                EditorUtility.SetDirty(material);
+            }
             return material;
         }
 
@@ -2234,6 +2788,22 @@ namespace JapaneseDemonHunter.GameplayEditor
             }
         }
 
+        private static void SetColor(Object target, string fieldName, Color value)
+        {
+            var serialized = new SerializedObject(target);
+            SetSerializedColor(serialized, fieldName, value);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void SetSerializedColor(SerializedObject serialized, string fieldName, Color value)
+        {
+            SerializedProperty property = serialized.FindProperty(fieldName);
+            if (property != null)
+            {
+                property.colorValue = value;
+            }
+        }
+
         private static void SetSerializedBool(SerializedObject serialized, string fieldName, bool value)
         {
             SerializedProperty property = serialized.FindProperty(fieldName);
@@ -2266,14 +2836,99 @@ namespace JapaneseDemonHunter.GameplayEditor
                     Require(Mathf.Abs(bounds.min.y) < 0.8f, $"{name} stands on the road surface.", failures);
                 }
 
-                Require(horse.GetComponent<HorseLocomotionDriver>() != null,
-                    $"{name} has the procedural idle/gallop driver.", failures);
+                Require(horse.GetComponent<HorseAnimationDriver>() != null,
+                    $"{name} has the clip-driven idle/gallop state machine.", failures);
             }
 
             Require(found == 2, "Both real horse models are present.", failures);
-            Require(GameObject.Find("ReinHeadAnchor") != null,
-                "The reins attach to an anchor taken from the real horse head.", failures);
+            Require(GameObject.Find("ReinCollarAnchor") != null,
+                "The reins attach to a collar anchor on the real horse neck.", failures);
+            RequireNoActiveRenderers("HorsePlaceholders",
+                "The old block horse heads and bodies are hidden.", failures);
+            Require(GameObject.Find("Wagon_Model") != null,
+                "The real wagon model replaced the block-built carriage.", failures);
+        }
 
+        /// <summary>
+        /// Guards against the placeholder block art coming back on top of the real models. Only the
+        /// built-in primitive meshes are checked: the real horse is parented under the same
+        /// HorsePlaceholders node and must stay visible.
+        /// </summary>
+        private static void RequireNoActiveRenderers(string rootName, string message, ICollection<string> failures)
+        {
+            GameObject carriage = GameObject.Find("CarriagePrototype");
+            Transform root = carriage != null ? FindChild(carriage.transform, rootName) : null;
+            if (root == null)
+            {
+                return;
+            }
+
+            foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Mesh mesh = filter.sharedMesh;
+                if (mesh == null || !IsBuiltInPrimitive(mesh))
+                {
+                    continue;
+                }
+
+                var renderer = filter.GetComponent<Renderer>();
+                if (renderer != null && renderer.enabled)
+                {
+                    Require(false, message, failures);
+                    return;
+                }
+            }
+        }
+
+        private static bool IsBuiltInPrimitive(Mesh mesh)
+        {
+            string name = mesh.name;
+            return name == "Cube" || name == "Sphere" || name == "Cylinder" ||
+                   name == "Capsule" || name == "Plane" || name == "Quad";
+        }
+
+        /// <summary>
+        /// Each lamp must stand over the bed rather than in mid air, and the bed must be wider than
+        /// both horses together, so the carriage reads as the thing being pulled.
+        /// </summary>
+        private static void ValidateCarriageLamps(ICollection<string> failures)
+        {
+            GameObject wagon = GameObject.Find("Wagon_Model");
+            if (wagon == null || !TryGetRendererBounds(wagon, out Bounds bed))
+            {
+                Require(false, "The wagon model is present and measurable.", failures);
+                return;
+            }
+
+            GameObject leftHorse = GameObject.Find("Horse_Model_Left");
+            GameObject rightHorse = GameObject.Find("Horse_Model_Right");
+            if (leftHorse != null && rightHorse != null &&
+                TryGetCombinedBounds(leftHorse.transform, rightHorse.transform, out Bounds horses))
+            {
+                Require(bed.size.x > horses.size.x,
+                    "The wagon is wider than both horses together, so they read as harnessed to it.", failures);
+            }
+
+            foreach (string name in new[] { "Lamp_FrontLeft", "Lamp_FrontRight", "Lamp_RearLeft", "Lamp_RearRight" })
+            {
+                GameObject lamp = GameObject.Find(name);
+                if (lamp == null)
+                {
+                    Require(false, $"{name} exists.", failures);
+                    continue;
+                }
+
+                Vector3 position = lamp.transform.position;
+                Require(position.x >= bed.min.x - 0.01f && position.x <= bed.max.x + 0.01f &&
+                        position.z >= bed.min.z - 0.01f && position.z <= bed.max.z + 0.01f,
+                    $"{name} stands over the wagon bed instead of floating beside it.", failures);
+                Require(position.y >= bed.min.y && position.y <= bed.max.y + 0.6f,
+                    $"{name} is seated at the level of the wagon bed.", failures);
+            }
+        }
+
+        private static void ValidateKnife(ICollection<string> failures)
+        {
             GameObject knifeModel = GameObject.Find("Knife_Model");
             if (knifeModel != null && TryGetRendererBounds(knifeModel, out Bounds knifeBounds))
             {

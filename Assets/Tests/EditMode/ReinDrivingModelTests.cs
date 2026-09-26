@@ -7,6 +7,32 @@ namespace Reins.Tests
     public sealed class ReinDrivingModelTests
     {
         [Test]
+        public void MissingOrInvalidTrackedSelectionGetsVisualGraceWithoutDrivingGestures()
+        {
+            var grace = new ReinSelectionGraceModel(0.1f);
+            var machine = new ReinGestureStateMachine();
+
+            Assert.IsTrue(grace.ShouldHoldPosition(false, 0.016f));
+            Assert.IsFalse(ReinHandOwnership.CanDrive(
+                Handedness.Left, Handedness.Left, true, true, false));
+            Assert.AreEqual(ReinGestureKind.None,
+                machine.Step(false, new Vector3(0.4f, 0.5f, 0.5f), 0.016f).Kind);
+            Assert.IsTrue(grace.ShouldHoldPosition(false, 0.05f));
+            Assert.IsTrue(grace.ShouldHoldPosition(false, 0.05f));
+            Assert.IsFalse(grace.ShouldHoldPosition(false, 0.016f));
+        }
+
+        [Test]
+        public void ValidTrackedSelectionResetsTheVisualGrace()
+        {
+            var grace = new ReinSelectionGraceModel(0.1f);
+
+            Assert.IsTrue(grace.ShouldHoldPosition(false, 0.08f));
+            Assert.IsFalse(grace.ShouldHoldPosition(true, 0.016f));
+            Assert.IsTrue(grace.ShouldHoldPosition(false, 0.08f));
+        }
+
+        [Test]
         public void GestureIsInertWhenReinIsReleasedOrTrackingIsInvalid()
         {
             var machine = new ReinGestureStateMachine();
