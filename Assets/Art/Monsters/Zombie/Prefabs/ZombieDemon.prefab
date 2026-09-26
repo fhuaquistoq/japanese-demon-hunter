@@ -141,7 +141,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 27720fed0dd40b348b0f3f0af085a6d5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.GroundMonsterMovement
-  patrolSpeed: 1.8
+  patrolSpeed: 6.8
   chaseSpeed: 6.8
   approachSpeed: 6.4
   rotationSharpness: 7

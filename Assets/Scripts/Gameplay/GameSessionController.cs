@@ -80,6 +80,11 @@ namespace JapaneseDemonHunter.Gameplay
             }
 
             run.Tick(Time.unscaledDeltaTime);
+            if (deathEffect != null && motor != null)
+            {
+                // The persistent danger redness follows how much the hanging monsters are slowing the carriage.
+                deathEffect.SetDanger(1f - Mathf.Clamp01(motor.SpeedMultiplier));
+            }
         }
 
         private void HandleVictory()
@@ -98,14 +103,9 @@ namespace JapaneseDemonHunter.Gameplay
         private void HandlePlayerHit(MonsterBase attacker)
         {
             if (run == null || run.Result != GameRunResult.Playing) return;
-            bool fatal = run.ReceiveHit();
-            if (deathEffect != null)
-            {
-                deathEffect.SetDanger(1f - (float)run.RemainingHits / playerHitPoints);
-                deathEffect.FlashDamage();
-            }
-
-            if (fatal) EndDefeat("Los monstruos te derrotaron.");
+            // Small monsters never defeat the player: each hit cuts speed and flashes the danger overlay.
+            if (motor != null) motor.ApplyHitPenalty();
+            if (deathEffect != null) deathEffect.FlashDamage();
         }
 
         private void EndDefeat(string reason)

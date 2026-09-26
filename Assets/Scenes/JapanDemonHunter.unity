@@ -2123,7 +2123,7 @@ MonoBehaviour:
     maximumRadius: 0
     minimumFlyingHeight: 0
     maximumFlyingHeight: 0
-    attachmentLoad: 15
+    attachmentLoad: 20
     overrideTargetStrategy: 1
     targetStrategy: 3
   - prefab: {fileID: 1061284169033169403, guid: 51b492f505fdc5f48a9358c2e3ed80eb, type: 3}
@@ -2133,7 +2133,7 @@ MonoBehaviour:
     maximumRadius: 0
     minimumFlyingHeight: 3.5
     maximumFlyingHeight: 7
-    attachmentLoad: 5
+    attachmentLoad: 20
     overrideTargetStrategy: 1
     targetStrategy: 3
   spawnOneOfEachOnStart: 0
@@ -2171,7 +2171,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: JapaneseDemonHunter.Monsters::JapaneseDemonHunter.Monsters.CartMonsterLoad
   referenceMaximumLoad: 60
-  minimumSpeedMultiplier: 0.3
+  minimumSpeedMultiplier: 0
   speedPenaltyReceiver: {fileID: 613630552}
 --- !u!114 &427063528
 MonoBehaviour:
@@ -2715,7 +2715,7 @@ MonoBehaviour:
   laneWidth: 2.8
   laneShiftDuration: 0.8
   boundarySpeedPenalty: 0.7
-  minimumLoadSpeedMultiplier: 0.3
+  minimumLoadSpeedMultiplier: 0
   followRoadCurvature: 1
   maximumYawRate: 25
   gestureAudioSource: {fileID: 613630553}
@@ -3674,7 +3674,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0.95
+      value: 0.6
       objectReference: {fileID: 0}
     - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_LocalPosition.y
@@ -3682,7 +3682,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0.35
+      value: -0.12
       objectReference: {fileID: 0}
     - target: {fileID: 4252421029425046603, guid: 658245a04427ea7479977447eef58b8d, type: 3}
       propertyPath: m_LocalRotation.w

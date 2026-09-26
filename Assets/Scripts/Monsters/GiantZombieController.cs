@@ -190,7 +190,18 @@ namespace JapaneseDemonHunter.Monsters
                     obstacleMask, QueryTriggerInteraction.Ignore)
                 .Any(hit => hit.collider != null &&
                             !hit.transform.IsChildOf(transform) &&
+                            !IsOnCart(hit.transform) &&
                             hit.collider.GetComponentInParent<MonsterGroundSurface>() == null);
+        }
+
+        /// <summary>
+        /// The giant is chasing the cart, so the cart must never count as an obstacle: otherwise its
+        /// own avoidance stops it short of the catch distance for good.
+        /// </summary>
+        private bool IsOnCart(Transform candidate)
+        {
+            return cartTransform != null &&
+                   (candidate == cartTransform || candidate.IsChildOf(cartTransform));
         }
 
         private bool TryFindGround(Vector3 position, out RaycastHit hit)

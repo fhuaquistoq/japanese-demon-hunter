@@ -23,6 +23,17 @@ namespace Reins
         [SerializeField, Min(0.1f)] private float boundarySpeedPenalty = 0.7f;
         [Header("Monster load")]
         [SerializeField, Range(0f, 1f)] private float minimumLoadSpeedMultiplier = 0.3f;
+        [Header("Slowdown when hit")]
+        [Tooltip("Penalty accumulated by one hit; 1 is the maximum slowdown defined below.")]
+        [SerializeField, Range(0f, 1f)] private float hitPenaltyPerHit = 0.5f;
+        [Tooltip("Fraction of the maximum speed lost while the hit penalty is at its peak.")]
+        [SerializeField, Range(0f, 1f)] private float hitMaximumSpeedLoss = 0.4f;
+        [Tooltip("Fraction of the stroke acceleration lost while the hit penalty is at its peak.")]
+        [SerializeField, Range(0f, 1f)] private float hitAccelerationLoss = 0.5f;
+        [Tooltip("Seconds the hit penalty takes to fade away completely.")]
+        [SerializeField, Min(0.1f)] private float hitPenaltyRecoverySeconds = 5f;
+        [Tooltip("Speed removed immediately by a single hit, before the lingering penalty applies.")]
+        [SerializeField, Min(0f)] private float hitSpeedCut = 0.8f;
         [Header("Road curvature")]
         [SerializeField] private bool followRoadCurvature = true;
         [SerializeField, Min(0f)] private float maximumYawRate = 25f;
@@ -49,6 +60,7 @@ namespace Reins
         private float _speed;
         private int _lane;
         private bool _firstGallopRaised;
+        private CartHitPenaltyModel _hitPenalty;
 
         public float Speed => _speed;
         public int Lane => _lane;
@@ -73,9 +85,19 @@ namespace Reins
         /// </summary>
         private CartLoadSpeedModel LoadModel => _loadModel ??= new CartLoadSpeedModel(maximumSpeed);
 
+        private CartHitPenaltyModel HitPenalty =>
+            _hitPenalty ??= new CartHitPenaltyModel(hitMaximumSpeedLoss, hitAccelerationLoss);
+
+        /// <summary>Speed ceiling after both the monster load and the current hit penalty.</summary>
+        private float CurrentSpeedCeiling => LoadModel.EffectiveMaximumSpeed * HitPenalty.MaximumSpeedFactor;
+
+        /// <summary>Acceleration of one stroke, weakened by the current hit penalty.</summary>
+        private float StrokeAcceleration => accelerationPerStroke * HitPenalty.AccelerationFactor;
+
         private void Awake()
         {
             _loadModel = new CartLoadSpeedModel(maximumSpeed);
+            _hitPenalty = new CartHitPenaltyModel(hitMaximumSpeedLoss, hitAccelerationLoss);
             _speed = Mathf.Clamp(startingSpeed, 0f, maximumSpeed);
             _loadModel.ReportSpeed(_speed);
             _laneTransition.Begin(0f, _lane, laneWidth, laneShiftDuration);
@@ -98,6 +120,7 @@ namespace Reins
         private void Update()
         {
             var deltaTime = Time.deltaTime;
+            HitPenalty.Tick(deltaTime, hitPenaltyRecoverySeconds);
             leftRein?.UpdateGrip(deltaTime);
             rightRein?.UpdateGrip(deltaTime);
             ReinGesture gesture = _reinGestures.Step(
@@ -113,8 +136,7 @@ namespace Reins
                 _speed = Mathf.MoveTowards(_speed, 0f, coastingDeceleration * deltaTime);
             }
 
-            _speed = LoadModel.ClampSpeed(_speed);
-            LoadModel.ReportSpeed(_speed);
+            ClampSpeed();
 
             var previousPosition = transform.position;
             if (followRoadCurvature && _roadPath != null)
@@ -156,14 +178,30 @@ namespace Reins
         public void SetMonsterLoadMultiplier(float multiplier)
         {
             LoadModel.SetMonsterLoadMultiplier(Mathf.Clamp(multiplier, minimumLoadSpeedMultiplier, 1f));
-            _speed = LoadModel.ClampSpeed(_speed);
+            ClampSpeed();
+        }
+
+        /// <summary>
+        /// Applied when a monster hits the player: it cuts the current speed and leaves a slowdown
+        /// that weakens both the maximum speed and the acceleration until it fades away.
+        /// </summary>
+        public void ApplyHitPenalty()
+        {
+            HitPenalty.Apply(hitPenaltyPerHit);
+            _speed = Mathf.Max(0f, _speed - hitSpeedCut);
+            ClampSpeed();
+        }
+
+        private void ClampSpeed()
+        {
+            _speed = Mathf.Min(LoadModel.ClampSpeed(_speed), CurrentSpeedCeiling);
             LoadModel.ReportSpeed(_speed);
         }
 
         /// <summary>Integration point for external systems that request a lash of the reins.</summary>
         public void RequestAcceleration()
         {
-            _speed = _stopModel.Accelerate(_speed, accelerationPerStroke, LoadModel.EffectiveMaximumSpeed);
+            _speed = _stopModel.Accelerate(_speed, StrokeAcceleration, CurrentSpeedCeiling);
         }
 
         private void Apply(ReinGesture gesture)
@@ -179,8 +217,7 @@ namespace Reins
             switch (gesture.Kind)
             {
                 case ReinGestureKind.Accelerate:
-                    _speed = _stopModel.Accelerate(
-                        _speed, accelerationPerStroke, LoadModel.EffectiveMaximumSpeed);
+                    _speed = _stopModel.Accelerate(_speed, StrokeAcceleration, CurrentSpeedCeiling);
                     if (!_firstGallopRaised)
                     {
                         _firstGallopRaised = true;

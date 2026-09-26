@@ -34,6 +34,8 @@ namespace Reins
         [SerializeField, Min(0f)] private float dropThreshold = 0.10f;
         [Tooltip("Backward pull that brakes.")]
         [SerializeField, Min(0f)] private float brakeThreshold = 0.15f;
+        [Tooltip("Disabled by design: pulling the rope backwards no longer brakes the carriage.")]
+        [SerializeField] private bool enableBrakeGesture;
         [Tooltip("Sideways pull that changes lane.")]
         [SerializeField, Min(0f)] private float laneThreshold = 0.18f;
         [Tooltip("How close to the neutral point the rope must come back before another stroke is allowed.")]
@@ -123,7 +125,7 @@ namespace Reins
         {
             return new ReinGestureStateMachine(
                 liftThreshold, dropThreshold, brakeThreshold, laneThreshold,
-                rearmRadius, gestureCooldown, liftWindow, minimumDropSpeed);
+                rearmRadius, gestureCooldown, liftWindow, minimumDropSpeed, enableBrakeGesture);
         }
 
         /// <summary>Updates the grip anchor from tracked hand input without interpreting a gesture.</summary>

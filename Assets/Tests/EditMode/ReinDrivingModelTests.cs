@@ -166,6 +166,20 @@ namespace Reins.Tests
                 machine.Step(true, new Vector3(0f, 0f, 0.2f), 0.016f).Kind);
         }
 
+        [Test]
+        public void DisabledBrakeGestureNeverBrakesAndLeavesTheRopeArmed()
+        {
+            var machine = new ReinGestureStateMachine(brakeEnabled: false);
+
+            Assert.AreEqual(ReinGestureKind.None,
+                machine.Step(true, new Vector3(0f, 0f, 0.3f), 0.016f).Kind,
+                "A backward pull must not brake while the gesture is disabled.");
+
+            Assert.AreEqual(ReinGestureKind.LanePull,
+                machine.Step(true, new Vector3(0.3f, 0f, 0.3f), 0.016f).Kind,
+                "The disabled brake must not consume the armed state: the sideways pull still changes lane.");
+        }
+
         [TestCase(0.25f, 0f, ReinGestureKind.LanePull)]
         [TestCase(0f, 0.25f, ReinGestureKind.Brake)]
         public void HoldingAPullDoesNotRepeatTheCommand(float sideways, float backwards,
@@ -281,6 +295,61 @@ namespace Reins.Tests
             Assert.AreEqual(0.7f, stopped.Accelerate(0f, 0.7f, 3.2f), 0.0001f);
             Assert.IsFalse(stopped.IsStopped);
             Assert.AreEqual(1.4f, stopped.Accelerate(0.7f, 0.7f, 3.2f), 0.0001f);
+        }
+    }
+
+    public sealed class CartHitPenaltyModelTests
+    {
+        [Test]
+        public void OneHitWeakensMaximumSpeedAndAcceleration()
+        {
+            var model = new CartHitPenaltyModel(0.4f, 0.5f);
+            model.Apply(0.5f);
+
+            Assert.AreEqual(0.5f, model.Penalty, 0.0001f);
+            Assert.AreEqual(0.8f, model.MaximumSpeedFactor, 0.0001f);
+            Assert.AreEqual(0.75f, model.AccelerationFactor, 0.0001f);
+        }
+
+        [Test]
+        public void RepeatedHitsAccumulateUpToTheMaximumSlowdown()
+        {
+            var model = new CartHitPenaltyModel(0.4f, 0.5f);
+            model.Apply(0.5f);
+            model.Apply(0.5f);
+            model.Apply(0.5f);
+
+            Assert.AreEqual(1f, model.Penalty, 0.0001f);
+            Assert.AreEqual(0.6f, model.MaximumSpeedFactor, 0.0001f);
+            Assert.AreEqual(0.5f, model.AccelerationFactor, 0.0001f);
+        }
+
+        [Test]
+        public void PenaltyFadesAwayOverTheRecoveryTime()
+        {
+            var model = new CartHitPenaltyModel(0.4f, 0.5f);
+            model.Apply(1f);
+            model.Tick(2.5f, 5f);
+
+            Assert.AreEqual(0.5f, model.Penalty, 0.0001f);
+            Assert.AreEqual(0.8f, model.MaximumSpeedFactor, 0.0001f);
+
+            model.Tick(5f, 5f);
+
+            Assert.AreEqual(0f, model.Penalty, 0.0001f);
+            Assert.AreEqual(1f, model.MaximumSpeedFactor, 0.0001f);
+            Assert.AreEqual(1f, model.AccelerationFactor, 0.0001f);
+        }
+
+        [Test]
+        public void ClearRemovesThePenalty()
+        {
+            var model = new CartHitPenaltyModel(0.4f, 0.5f);
+            model.Apply(1f);
+            model.Clear();
+
+            Assert.AreEqual(0f, model.Penalty, 0.0001f);
+            Assert.AreEqual(1f, model.MaximumSpeedFactor, 0.0001f);
         }
     }
 }

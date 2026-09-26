@@ -343,14 +343,14 @@ namespace JapaneseDemonHunter.Monsters.Editor
                 if (movementType == MonsterMovementType.Flying)
                 {
                     FlyingMonsterMovement flying = root.AddComponent<FlyingMonsterMovement>();
-                    flying.ConfigureSpeeds(3f, 7.2f, 6.8f);
+                    flying.ConfigureSpeeds(7.2f, 7.2f, 6.8f);
                     flying.ConfigureFlight(1.7f, 7.5f, ~0);
                     movement = flying;
                 }
                 else
                 {
                     GroundMonsterMovement ground = root.AddComponent<GroundMonsterMovement>();
-                    ground.ConfigureSpeeds(1.8f, 6.8f, 6.4f);
+                    ground.ConfigureSpeeds(6.8f, 6.8f, 6.4f);
                     ground.ConfigureGrounding(~0, ~0);
                     movement = ground;
                 }

@@ -44,3 +44,4 @@
 - For VR testing, expects the XR Simulator to be avoided as a substitute for real device behaviour. Confidence: 0.55
 - Wants important interactive elements (grips/handles, the rope) to be visually distinct and easy to identify — e.g. coloring the handles and rope a strong, contrasting color. Confidence: 0.6
 - Prefers the player's line of sight to the cart kept unobstructed: scenery that blocks the view of the cart (e.g. rocks on the road) should be cleared away even when it also removes a gameplay element. Confidence: 0.6
+- When a feature must be turned off, wants it disabled through a serialized boolean toggle (default off) and neutralized at its source — so it is no longer detected and cannot consume shared state or outrank other inputs — rather than just suppressing the downstream effect, while leaving the underlying code intact so it can be re-enabled from the Inspector without code changes. Confidence: 0.6

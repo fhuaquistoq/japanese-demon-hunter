@@ -178,7 +178,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             CreateClosedReinLoop(vehicleRoot.transform, leftRein, rightRein, leftHorseHead, rightHorseHead, ropeMaterial);
             WireObject(motor, "leftRein", leftRein);
             WireObject(motor, "rightRein", rightRein);
-            SetFloat(motor, "minimumLoadSpeedMultiplier", 0.3f);
+            SetFloat(motor, "minimumLoadSpeedMultiplier", 0f);
             SetFloat(motor, "maximumYawRate", 25f);
             SetBool(motor, "followRoadCurvature", true);
             SetFloat(motor, "maximumSpeed", 5f);
@@ -1394,7 +1394,7 @@ namespace JapaneseDemonHunter.GameplayEditor
 
         private static void CreateKnife(Transform vehicleRoot)
         {
-            GameObject knife = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, new Vector3(0.95f, 0.74f, 0.35f));
+            GameObject knife = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, new Vector3(0.6f, 0.74f, -0.12f));
             knife.name = "Knife";
             // The rope grip prefab is squashed (0.04, 0.2, 0.04), which would distort any model
             // parented under it. It is normalised here and given a knife shaped grab volume instead.
@@ -1509,7 +1509,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             attachmentPoints.Configure(CreateAttachmentPoints(vehicleRoot));
 
             CartMonsterLoad cartLoad = systemObject.AddComponent<CartMonsterLoad>();
-            cartLoad.Configure(60f, 0.3f, vehicleRoot.GetComponent<CarriageMotor>());
+            cartLoad.Configure(60f, 0f, vehicleRoot.GetComponent<CarriageMotor>());
 
             MonsterSpawner spawner = systemObject.AddComponent<MonsterSpawner>();
             spawner.Configure(
@@ -1523,7 +1523,7 @@ namespace JapaneseDemonHunter.GameplayEditor
                         prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ZombiePrefabPath),
                         movementType = MonsterMovementType.Ground,
                         weight = 1f,
-                        attachmentLoad = 15f,
+                        attachmentLoad = 20f,
                         overrideTargetStrategy = true,
                         targetStrategy = MonsterTargetStrategy.PrioritizeHunter
                     },
@@ -1534,7 +1534,7 @@ namespace JapaneseDemonHunter.GameplayEditor
                         weight = 1f,
                         minimumFlyingHeight = 3.5f,
                         maximumFlyingHeight = 7f,
-                        attachmentLoad = 5f,
+                        attachmentLoad = 20f,
                         overrideTargetStrategy = true,
                         targetStrategy = MonsterTargetStrategy.PrioritizeHunter
                     }
@@ -1799,8 +1799,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             {
                 Require(cartLoad.HasReceiver,
                     "CartMonsterLoad is connected to the carriage speed receiver.", failures);
-                Require(cartLoad.ReferenceMaximumLoad > 0f && cartLoad.MinimumSpeedMultiplier > 0f,
-                    "CartMonsterLoad exposes positive balance values.", failures);
+                Require(cartLoad.ReferenceMaximumLoad > 0f && cartLoad.MinimumSpeedMultiplier >= 0f,
+                    "CartMonsterLoad exposes valid balance values.", failures);
                 Require(Mathf.Approximately(cartLoad.SpeedMultiplier, 1f),
                     "An unloaded cart starts with a neutral speed multiplier.", failures);
             }

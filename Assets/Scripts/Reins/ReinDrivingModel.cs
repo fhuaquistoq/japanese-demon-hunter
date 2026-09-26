@@ -34,6 +34,7 @@ namespace Reins
         private readonly float _cooldownSeconds;
         private readonly float _liftWindowSeconds;
         private readonly float _minimumDropSpeed;
+        private readonly bool _brakeEnabled;
 
         private float _cooldown;
         private float _liftAge;
@@ -51,7 +52,8 @@ namespace Reins
             float rearmRadius = 0.12f,
             float cooldownSeconds = 0.4f,
             float liftWindowSeconds = 3f,
-            float minimumDropSpeed = 0.35f)
+            float minimumDropSpeed = 0.35f,
+            bool brakeEnabled = true)
         {
             _liftThreshold = liftThreshold;
             _dropThreshold = dropThreshold;
@@ -61,6 +63,7 @@ namespace Reins
             _cooldownSeconds = cooldownSeconds;
             _liftWindowSeconds = liftWindowSeconds;
             _minimumDropSpeed = minimumDropSpeed;
+            _brakeEnabled = brakeEnabled;
         }
 
         public ReinGesture Step(bool heldByTrackedHand, Vector3 pull, float deltaTime)
@@ -114,7 +117,7 @@ namespace Reins
 
             if (_armed && _cooldown <= 0f)
             {
-                if (pull.z >= _brakeThreshold)
+                if (_brakeEnabled && pull.z >= _brakeThreshold)
                 {
                     return Fire(ReinGestureKind.Brake, 0);
                 }
