@@ -3,6 +3,7 @@
   "rootNamespace": "JapaneseDemonHunter.Gameplay.Tests",
   "references": [
     "JapaneseDemonHunter.Gameplay",
+    "JapaneseDemonHunter.Monsters",
     "JapaneseDemonHunter.Prototype",
     "Reins",
     "Oculus.Interaction"

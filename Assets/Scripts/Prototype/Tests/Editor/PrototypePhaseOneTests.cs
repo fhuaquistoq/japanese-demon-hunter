@@ -44,7 +44,7 @@ namespace JapaneseDemonHunter.Prototype.Tests
         }
 
         [Test]
-        public void FrontLaneMonsterSpawnUsesOneCenteredLaneAtConfiguredForwardOffset()
+        public void FrontLaneMonsterSpawnUsesOneCenteredLaneAheadOfTheTravellingDirection()
         {
             Type spawnerType = Type.GetType("JapaneseDemonHunter.Monsters.MonsterSpawner, JapaneseDemonHunter.Monsters");
             Type entryType = Type.GetType("JapaneseDemonHunter.Monsters.MonsterSpawnEntry, JapaneseDemonHunter.Monsters");
@@ -80,7 +80,9 @@ namespace JapaneseDemonHunter.Prototype.Tests
                     object[] arguments = { entry, Vector3.zero };
                     Assert.That(findPosition.Invoke(spawner, arguments), Is.True);
                     Vector3 offset = (Vector3)arguments[1] - cart.transform.position;
-                    Assert.That(Vector3.Dot(offset, cart.transform.forward), Is.EqualTo(10f).Within(0.001f));
+                    // The carriage rides along -forward, so the front lane must sit against that
+                    // direction: spawning on +forward put the bat behind a cart moving away from it.
+                    Assert.That(Vector3.Dot(offset, cart.transform.forward), Is.EqualTo(-10f).Within(0.001f));
                     float laneCoordinate = Vector3.Dot(offset, cart.transform.right) / 2.8f;
                     Assert.That(laneCoordinate, Is.EqualTo(Mathf.Round(laneCoordinate)).Within(0.001f));
                     Assert.That(Mathf.RoundToInt(laneCoordinate), Is.InRange(-1, 1));

@@ -95,4 +95,39 @@ namespace JapaneseDemonHunter.Gameplay
             return wave;
         }
     }
+
+    public sealed class FaceBatCrouchModel
+    {
+        private readonly float dropThreshold;
+        private readonly float dodgeHoldDuration;
+        private readonly float lowFlightDelay;
+        private float standingHeight;
+        private float duckDuration;
+        private bool calibrated;
+
+        public FaceBatCrouchModel(float dropThreshold, float dodgeHoldDuration, float lowFlightDelay)
+        {
+            this.dropThreshold = Mathf.Max(0f, dropThreshold);
+            this.dodgeHoldDuration = Mathf.Max(0f, dodgeHoldDuration);
+            this.lowFlightDelay = Mathf.Max(this.dodgeHoldDuration, lowFlightDelay);
+        }
+
+        public float StandingHeight => standingHeight;
+        public bool IsDucking { get; private set; }
+        public bool CanDodge => IsDucking && duckDuration >= dodgeHoldDuration && !ShouldFlyLow;
+        public bool ShouldFlyLow => IsDucking && duckDuration >= lowFlightDelay;
+
+        public void Step(float relativeEyeHeight, float deltaTime)
+        {
+            if (!calibrated)
+            {
+                standingHeight = relativeEyeHeight;
+                calibrated = true;
+            }
+
+            standingHeight = Mathf.Max(standingHeight, relativeEyeHeight);
+            IsDucking = standingHeight - relativeEyeHeight >= dropThreshold;
+            duckDuration = IsDucking ? duckDuration + Mathf.Max(0f, deltaTime) : 0f;
+        }
+    }
 }

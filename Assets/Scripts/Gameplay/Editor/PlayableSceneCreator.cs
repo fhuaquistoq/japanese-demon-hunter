@@ -36,9 +36,9 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const string ReinGripMaterialPath = "Assets/Materials/Game/Mat_ReinGrip.mat";
         private const string WagonBodyMaterialPath = "Assets/Materials/Game/Mat_Wagon_Body.mat";
         private const string WagonHardwareMaterialPath = "Assets/Materials/Game/Mat_Wagon_Hardware.mat";
-        private const string ZombiePrefabPath = "Assets/Art/Monsters/Zombie/Prefabs/ZombieDemon.prefab";
+        private const string ZombiePrefabPath = "Assets/Art/Monsters/Zombie/Prefabs/ZombieHordeDemon.prefab";
         private const string BatPrefabPath = "Assets/Art/Monsters/Bat/Prefabs/BatDemon.prefab";
-        private const string GiantPrefabPath = "Assets/Art/Monsters/GiantZombie/Prefabs/GiantZombie.prefab";
+        private const string GiantPrefabPath = "Assets/Art/Monsters/GiantZombie/Prefabs/GiantHordeZombie.prefab";
         private const string HorseModelPath = "Assets/Art/Monsters/Horse/Horse.fbx";
         private const string HorseControllerPath = "Assets/Animations/Horse/Horse.controller";
         private const string WagonModelPath = "Assets/Art/Wagon/Wild West Cart.obj";
@@ -61,7 +61,7 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const int TotalRoadTiles = 40;
         // Horse.fbx measures 4.81 m from hooves to ears before scaling, and its head points to +Z,
         // so every instance is turned 180 degrees to face the direction of travel.
-        private const float HorseTargetHeight = 2.35f;
+        private const float HorseTargetHeight = 2.115f;
         private const float HorseYawDegrees = 180f;
         // The wagon obj is authored with its length along its own X and its wheel axles along Z, so
         // it is turned a quarter turn to travel along the carriage's -Z. Its fit is otherwise derived
@@ -72,16 +72,19 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const float WagonWidthMargin = 0.30f;
         // Overall size of the bed once it has been fitted to the horses. Scaling the whole model keeps
         // its proportions; only the width would otherwise leave it wider than it is long.
-        private const float WagonSizeMultiplier = 2f;
+        private const float WagonSizeMultiplier = 1.4f;
         // Gap between the horses' hindquarters and the front of the bed, so the gait never clips it.
         private const float WagonHorseClearance = 0.20f;
         // Fallback deck ratio, used only if the horse models are missing.
         private const float WagonDeckWidthScale = 0.95f;
-        // The lamps sit on the bed rails, inset from the corners so they stay inside the footprint.
-        private const float LampCornerInset = 0.16f;
+        // The lamps sit in from the corners so they stay inside the cart's footprint.
+        private const float LampCornerInset = 0.55f;
+        // They sit on top of the wagon's rails, as high as they go: with today's wagon that puts their
+        // base at y = 1.126, mounted just clear of the rail top.
+        private const float LampMountClearance = 0.006f;
         private const string LanternStandingModelPath = "Assets/Art/Lanterns/lantern_standing.fbx";
         private const string PostLanternModelPath = "Assets/Art/Lanterns/post_lantern.fbx";
-        private const float LanternStandingHeight = 0.95f;
+        private const float LanternStandingHeight = 0.45f;
         // Where the flame burns inside the standing lantern, as a fraction of its height.
         private const float LanternFlameHeight = 0.52f;
         // Warm firelight rather than a lantern-white: the night is dark on purpose and these are candles.
@@ -96,13 +99,27 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const float LanternGallopCueStartSpeed = 3.4f;
         private const float LanternGallopCueMaximumSpeed = 8f;
         private const float LanternGallopIntensityBoost = 0.18f;
-        // Roadside posts. One pair per tile keeps them recycling with the road instead of lining 700 m.
-        private const float PostLanternHeight = 3f;
+        // Roadside lights are spaced two tiles apart and only a few tile groups stay lit at once.
+        private const float PostLanternHeight = 3.6f;
         private const float PostLanternOffset = 1.1f;
-        private const float PostLanternSpacing = 18f;
+        private const float PostLanternSpacing = 36f;
         private static readonly Color PostLanternColor = new Color(1f, 0.70f, 0.34f);
-        private const float PostLanternIntensity = 5f;
-        private const float PostLanternRange = 24f;
+        private const float PostLanternIntensity = 6f;
+        private const float PostLanternRange = 30f;
+        // How many tiles either way keep their lanterns really lit. Every extra lit lantern is another
+        // real-time light in the forward pass, so this stays deliberately small.
+        private const int PostLanternLitChunkSpan = 1;
+        // Tiles either way keep their foliage enabled; the rest is switched off as whole batches.
+        private const int TreeBatchChunkSpan = 3;
+        // Render pipeline budget: only the carriage and the monsters near it are worth shadowing.
+        private const int ShadowDistanceMeters = 22;
+        // Ordinal inside URP's MsaaQuality enum, whose values are 1/2/4/8: 1 selects 2x.
+        private const int AntiAliasingEnumIndex = 1;
+        private static readonly string[] RenderPipelinePaths =
+        {
+            "Assets/Settings/Mobile_RPAsset.asset",
+            "Assets/Settings/PC_RPAsset.asset"
+        };
         // How far below the head the rein collar sits, so the rope meets the neck, not the muzzle.
         private const float ReinCollarDrop = 0.34f;
         private const float KnifeTargetLength = 0.85f;
@@ -110,10 +127,28 @@ namespace JapaneseDemonHunter.GameplayEditor
         private const float KnifeDamage = 12f;
         private const float SecondsBeforeFirstMonster = 38f;
         private const float MonsterSpawnInterval = 11f;
+        // The horde is always present once the ride starts; only a third of it runs fast enough to
+        // reach the cart, and the rest simply keep the player watched from behind.
+        private const int MinimumHordeSize = 6;
+        private const float FastHordeFraction = 0.34f;
+        private const float FastHordeSpeedMultiplier = 1.5f;
+        private const int BatRoundSize = 3;
+        private const float BatRoundCooldown = 5f;
+        private const float BatRoundApproachRadius = 80f;
 
-        // The rope hangs down to the carriage deck instead of floating at chest height.
-        private static readonly Vector3 LeftReinRest = new Vector3(-0.34f, 0.85f, -0.18f);
-        private static readonly Vector3 RightReinRest = new Vector3(0.34f, 0.85f, -0.18f);
+        // The rope hangs down to the carriage deck instead of floating at chest height. The height is
+        // solved from the wagon at generation time so the grips always clear its rails, which is what
+        // keeps the rope from cutting through the cart; only the sideways offset is fixed here.
+        private static readonly Vector3 LeftReinRest = new Vector3(-0.34f, 0f, -1.00f);
+        private static readonly Vector3 RightReinRest = new Vector3(0.34f, 0f, -1.00f);
+        // How far above the wagon's rail top the grips and the rope's floor sit.
+        private const float ReinGripClearance = 0.14f;
+        private const float ReinFloorClearance = 0.04f;
+        private const float ReinHandleVisualLength = 0.28f;
+        private const float ReinGrabZoneRadius = 0.07f;
+        private const float ReinGrabZoneLength = 0.34f;
+        // Barely any slack: the rein is meant to read as a taut line to the horses, not a loose loop.
+        private const float ReinSlack = 1.02f;
 
         // ---------------------------------------------------------------- gallop tuning
         private const string LeftWhipName = "LeftWhipHandle";
@@ -199,6 +234,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             scene.name = "JapanDemonHunter";
 
+            OptimizeRenderPipeline();
             ConfigureEnvironment(nightSky);
             CreateMoonlight();
             CreateGlobalVolume();
@@ -235,11 +271,18 @@ namespace JapaneseDemonHunter.GameplayEditor
 
             CreateGround(vehicleRoot.transform);
 
+            // The grips and the rope's floor are solved from the wagon's rail top, so the rein always
+            // rides above the cart instead of cutting through its boards.
+            float wagonTop = GetWagonTopLocalY(vehicleRoot.transform);
             ReinHandle leftRein = CreateRein(
-                vehicleRoot.transform, "Left_ReinPin", LeftReinRest, 0, gripMaterial);
+                vehicleRoot.transform, "Left_ReinPin",
+                new Vector3(LeftReinRest.x, wagonTop + ReinGripClearance, LeftReinRest.z), 0, gripMaterial);
             ReinHandle rightRein = CreateRein(
-                vehicleRoot.transform, "Right_ReinPin", RightReinRest, 1, gripMaterial);
-            CreateClosedReinLoop(vehicleRoot.transform, leftRein, rightRein, leftHorseHead, rightHorseHead, ropeMaterial);
+                vehicleRoot.transform, "Right_ReinPin",
+                new Vector3(RightReinRest.x, wagonTop + ReinGripClearance, RightReinRest.z), 1, gripMaterial);
+            CreateClosedReinLoop(
+                vehicleRoot.transform, leftRein, rightRein, leftHorseHead, rightHorseHead, ropeMaterial,
+                wagonTop + ReinFloorClearance);
             WireObject(motor, "leftRein", leftRein);
             WireObject(motor, "rightRein", rightRein);
             SetFloat(motor, "minimumLoadSpeedMultiplier", 0.3f);
@@ -255,6 +298,17 @@ namespace JapaneseDemonHunter.GameplayEditor
             DisableDetachedWhipHandles(vehicleRoot.transform);
 
             Camera centerEye = CreateVrRig(vehicleRoot.transform);
+            if (TryGetOriginalHandVisual(Handedness.Left, out Renderer leftHandVisual) &&
+                TryGetOriginalHandVisual(Handedness.Right, out Renderer rightHandVisual))
+            {
+                CreateSeparateReinGripVisuals(
+                    leftRein, rightRein, leftHandVisual, rightHandVisual, gripMaterial);
+            }
+            else
+            {
+                Debug.LogWarning("Safe Oculus hand visual references were unavailable for rein grip alignment.");
+            }
+
             Transform headAnchor = centerEye != null ? centerEye.transform : vehicleRoot.transform;
             Transform hunterAttackPoint = CreateChild(headAnchor, "HunterAttackPoint", new Vector3(0f, 0f, 0.35f));
 
@@ -428,20 +482,47 @@ namespace JapaneseDemonHunter.GameplayEditor
 
         // ---------------------------------------------------------------- environment
 
+        /// <summary>
+        /// Trims the render pipeline assets for a headset. Shadow distance is the cheapest big win: it
+        /// shrinks the shadow map's world area, and at night only the carriage and the monsters near it
+        /// cast anything worth seeing. MSAA drops from 4x to 2x, which is the standard trade on Quest.
+        /// The project has no default pipeline asset, it is set per quality level, so both the Quest and
+        /// the desktop assets are trimmed and what is judged in the editor matches the headset budget.
+        /// </summary>
+        private static void OptimizeRenderPipeline()
+        {
+            foreach (string path in RenderPipelinePaths)
+            {
+                var pipeline = AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>(path);
+                if (pipeline == null)
+                {
+                    Debug.LogWarning($"Render pipeline asset not found at {path}; it was left as is.");
+                    continue;
+                }
+
+                var serialized = new SerializedObject(pipeline);
+                SetSerializedNumber(serialized, "m_ShadowDistance", ShadowDistanceMeters);
+                // MSAA is an enum whose *ordinal* is written, not its sample count.
+                SetSerializedNumber(serialized, "m_MSAA", AntiAliasingEnumIndex);
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(pipeline);
+                Debug.Log($"Optimized {path}: shadow distance {ShadowDistanceMeters} m, MSAA 2x.");
+            }
+        }
+
         private static void ConfigureEnvironment(Material nightSky)
         {
             RenderSettings.ambientMode = AmbientMode.Flat;
-            // Near-neutral and a touch darker than before. The old ambient was blue, which tinted the
-            // whole world and left the dirt road and the forest edge the same colour; keeping it neutral
-            // lets each surface hold its own hue now that the lanterns carry most of the lighting.
-            RenderSettings.ambientLight = new Color(0.025f, 0.028f, 0.024f);
+            // Barely any ambient at all: away from a lantern everything falls to near black.
+            RenderSettings.ambientLight = new Color(0.006f, 0.007f, 0.008f);
             RenderSettings.skybox = nightSky;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.013f, 0.014f, 0.015f);
-            RenderSettings.fogStartDistance = 12f;
-            // Pulled in a little so the far end of the road fades out instead of opening onto bare ground.
-            RenderSettings.fogEndDistance = 78f;
+            // The mist is clearly lighter than the ambient, so it reads as an opaque wall of haze rather
+            // than as more darkness, and it closes early enough that nothing can be seen appearing.
+            RenderSettings.fogColor = new Color(0.034f, 0.036f, 0.040f);
+            RenderSettings.fogStartDistance = 4f;
+            RenderSettings.fogEndDistance = 26f;
         }
 
         private static void CreateMoonlight()
@@ -742,7 +823,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             float x = Mathf.Max(0.05f, bed.extents.x - LampCornerInset);
             float frontZ = bed.min.z + LampCornerInset;
             float rearZ = bed.max.z - LampCornerInset;
-            float railY = bed.max.y;
+            // Mounted on the wagon's rail top rather than part way down its side.
+            float railY = bed.max.y + LampMountClearance;
 
             return CreateCarriageLampsAt(vehicleRoot, lampMaterial,
                 vehicleRoot.InverseTransformPoint(new Vector3(-x, railY, frontZ)),
@@ -842,6 +924,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             GameObject handle = InstantiatePrefab(RopeProxyPrefabPath, vehicleRoot, restLocalPosition);
             handle.name = pinName.Replace("Pin", "Handle");
             handle.transform.localRotation = Quaternion.identity;
+            handle.transform.localScale = new Vector3(0.04f, ReinHandleVisualLength * 0.5f, 0.04f);
 
             MeshCollider meshCollider = handle.GetComponent<MeshCollider>();
             if (meshCollider != null)
@@ -852,8 +935,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             CapsuleCollider capsule = handle.GetComponent<CapsuleCollider>();
             if (capsule != null)
             {
-                capsule.radius = 0.5f;
-                capsule.height = 2f;
+                capsule.radius = ReinGrabZoneRadius;
+                capsule.height = ReinGrabZoneLength;
                 capsule.direction = 1;
                 capsule.center = Vector3.zero;
             }
@@ -865,12 +948,13 @@ namespace JapaneseDemonHunter.GameplayEditor
                 body.useGravity = false;
             }
 
-            if (gripMaterial != null)
+            foreach (Renderer renderer in handle.GetComponentsInChildren<Renderer>(true))
             {
-                foreach (Renderer renderer in handle.GetComponentsInChildren<Renderer>(true))
+                if (gripMaterial != null)
                 {
                     renderer.sharedMaterial = gripMaterial;
                 }
+                renderer.enabled = true;
             }
 
             Grabbable grabbable = handle.GetComponent<Grabbable>();
@@ -879,15 +963,231 @@ namespace JapaneseDemonHunter.GameplayEditor
                 SetBool(grabbable, "_throwWhenUnselected", false);
             }
 
-            HandGrabInteractable grabPoint = handle.GetComponentInChildren<HandGrabInteractable>(true);
+            HandGrabInteractable rootGrabPoint = handle.GetComponent<HandGrabInteractable>();
+            GameObject grabZone = InstantiatePrefab(RopeProxyPrefabPath, handle.transform, Vector3.zero);
+            grabZone.name = "Rein_HandGrabZone";
+            grabZone.transform.localScale = Vector3.one;
+            DisableGripVisuals(grabZone.transform);
+            ConfigureReinGrabProxy(grabZone);
+            if (rootGrabPoint != null)
+            {
+                rootGrabPoint.enabled = false;
+            }
+
+            DisableGripColliders(handle);
             ReinHandle rein = handle.AddComponent<ReinHandle>();
             SetInt(rein, "expectedHand", handedness);
-            SetBool(rein, "requireExpectedHand", false);
+            SetBool(rein, "requireExpectedHand", true);
+            SetBool(rein, "enableLaneGesture", false);
             SetVector3(rein, "restLocalPosition", restLocalPosition);
+            HandGrabInteractable grabPoint = grabZone.GetComponentInChildren<HandGrabInteractable>(true);
             SetObjectArray(rein, "grabPoints", grabPoint != null
                 ? new[] { grabPoint }
                 : new HandGrabInteractable[0]);
             return rein;
+        }
+
+        private static void SetReinHandleVisual(ReinHandle rein, Material gripMaterial)
+        {
+            Undo.RecordObject(rein.transform, "Shorten separate rein handle");
+            rein.transform.localScale = new Vector3(0.04f, ReinHandleVisualLength * 0.5f, 0.04f);
+            Renderer renderer = rein.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                Undo.RecordObject(renderer, "Show separate rein handle");
+                renderer.sharedMaterial = gripMaterial;
+                renderer.enabled = true;
+            }
+        }
+
+        private static void DisableGripVisuals(Transform root)
+        {
+            foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.enabled = false;
+            }
+        }
+
+        private static void ConfigureGrabProxy(GameObject grabZone)
+        {
+            MeshCollider mesh = grabZone.GetComponent<MeshCollider>();
+            if (mesh != null)
+            {
+                mesh.enabled = false;
+            }
+
+            CapsuleCollider capsule = grabZone.GetComponent<CapsuleCollider>();
+            if (capsule != null)
+            {
+                capsule.radius = 0.5f;
+                capsule.height = 2f;
+                capsule.direction = 1;
+                capsule.center = Vector3.zero;
+            }
+
+            Rigidbody body = grabZone.GetComponent<Rigidbody>();
+            if (body != null)
+            {
+                body.isKinematic = true;
+                body.useGravity = false;
+            }
+
+            Grabbable grabbable = grabZone.GetComponent<Grabbable>();
+            if (grabbable != null)
+            {
+                SetBool(grabbable, "_throwWhenUnselected", false);
+            }
+        }
+
+        private static void ConfigureReinGrabProxy(GameObject grabZone)
+        {
+            ConfigureGrabProxy(grabZone);
+            CapsuleCollider capsule = grabZone.GetComponent<CapsuleCollider>();
+            if (capsule == null)
+            {
+                return;
+            }
+
+            capsule.radius = ReinGrabZoneRadius;
+            capsule.height = ReinGrabZoneLength;
+            capsule.direction = 1;
+            capsule.center = Vector3.zero;
+        }
+
+        private static void DisableGripColliders(GameObject pin)
+        {
+            Collider[] colliders = pin.GetComponents<Collider>();
+            foreach (Collider collider in colliders)
+            {
+                collider.enabled = false;
+            }
+        }
+
+        private static void CreateSeparateReinGripVisuals(
+            ReinHandle left,
+            ReinHandle right,
+            Renderer leftHandVisual,
+            Renderer rightHandVisual,
+            Material gloveMaterial)
+        {
+            if (left == null || right == null)
+            {
+                return;
+            }
+
+            GameObject leftProxy = CreateGripProxy(left.transform, "ReinGripGlove_Left", -1f, gloveMaterial);
+            GameObject rightProxy = CreateGripProxy(right.transform, "ReinGripGlove_Right", 1f, gloveMaterial);
+            ConfigureGripVisualController(left, leftHandVisual, leftProxy);
+            ConfigureGripVisualController(right, rightHandVisual, rightProxy);
+        }
+
+        private static GameObject CreateGripProxy(
+            Transform grip, string name, float side, Material gloveMaterial)
+        {
+            Transform existing = grip.Find(name);
+            if (existing != null)
+            {
+                return existing.gameObject;
+            }
+
+            var root = new GameObject(name);
+            root.transform.SetParent(grip, false);
+            Vector3 parentScale = grip.localScale;
+            root.transform.localScale = new Vector3(
+                1f / Mathf.Max(0.0001f, Mathf.Abs(parentScale.x)),
+                1f / Mathf.Max(0.0001f, Mathf.Abs(parentScale.y)),
+                1f / Mathf.Max(0.0001f, Mathf.Abs(parentScale.z)));
+            root.transform.localPosition = Vector3.zero;
+            Undo.RegisterCreatedObjectUndo(root, "Create separate rein grip glove");
+
+            CreateGripPrimitive(root.transform, "Palm", PrimitiveType.Sphere,
+                new Vector3(0f, 0f, 0.078f), Vector3.zero, new Vector3(0.105f, 0.12f, 0.075f), gloveMaterial);
+            for (var finger = 0; finger < 4; finger++)
+            {
+                float across = (finger - 1.5f) * 0.037f;
+                CreateGripPrimitive(root.transform, "CurledFinger_" + finger, PrimitiveType.Capsule,
+                    new Vector3(across, 0.006f, 0.036f), new Vector3(78f, 0f, 0f),
+                    new Vector3(0.021f, 0.043f, 0.021f), gloveMaterial);
+            }
+
+            CreateGripPrimitive(root.transform, "Thumb", PrimitiveType.Capsule,
+                new Vector3(side * -0.085f, 0f, 0.045f), new Vector3(35f, 0f, side * 32f),
+                new Vector3(0.026f, 0.052f, 0.026f), gloveMaterial);
+            return root;
+        }
+
+        private static void CreateGripPrimitive(
+            Transform parent, string name, PrimitiveType primitiveType,
+            Vector3 localPosition, Vector3 localEuler, Vector3 localScale, Material material)
+        {
+            GameObject part = GameObject.CreatePrimitive(primitiveType);
+            part.name = name;
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localRotation = Quaternion.Euler(localEuler);
+            part.transform.localScale = localScale;
+            Collider collider = part.GetComponent<Collider>();
+            if (collider != null)
+            {
+                Undo.DestroyObjectImmediate(collider);
+            }
+
+            Renderer renderer = part.GetComponent<Renderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            Undo.RegisterCreatedObjectUndo(part, "Create glove proxy mesh");
+        }
+
+        private static void ConfigureGripVisualController(
+            ReinHandle rein, Renderer originalHandVisual, GameObject gloveProxy)
+        {
+            if (rein == null || originalHandVisual == null || gloveProxy == null)
+            {
+                return;
+            }
+
+            SharedReinGripVisuals visuals = rein.GetComponent<SharedReinGripVisuals>();
+            if (visuals == null)
+            {
+                visuals = Undo.AddComponent<SharedReinGripVisuals>(rein.gameObject);
+            }
+            else
+            {
+                Undo.RecordObject(visuals, "Wire shared rein hand visuals");
+            }
+
+            visuals.Configure(rein, new[] { originalHandVisual }, gloveProxy);
+            EditorUtility.SetDirty(visuals);
+        }
+
+        private static bool TryGetOriginalHandVisual(Handedness hand, out Renderer visual)
+        {
+            visual = null;
+            string rootName = hand == Handedness.Left ? "OVRHandVisualLeft" : "OVRHandVisualRight";
+            string meshName = hand == Handedness.Left ? "l_handMeshNode" : "r_handMeshNode";
+            GameObject visualRoot = GameObject.Find(rootName);
+            if (visualRoot == null)
+            {
+                return false;
+            }
+
+            SkinnedMeshRenderer match = null;
+            foreach (SkinnedMeshRenderer candidate in visualRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                if (candidate.name != meshName || !candidate.gameObject.activeInHierarchy || !candidate.enabled)
+                {
+                    continue;
+                }
+                if (match != null)
+                {
+                    return false;
+                }
+                match = candidate;
+            }
+
+            visual = match;
+            return visual != null;
         }
 
         private static void CreateClosedReinLoop(
@@ -896,7 +1196,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             ReinHandle rightRein,
             Transform leftHorseHead,
             Transform rightHorseHead,
-            Material ropeMaterial)
+            Material ropeMaterial,
+            float deckHeight)
         {
             var loopObject = new GameObject("ClosedReinLoop");
             loopObject.transform.SetParent(vehicleRoot, false);
@@ -912,6 +1213,10 @@ namespace JapaneseDemonHunter.GameplayEditor
             }
 
             ClosedReinLoop loop = loopObject.AddComponent<ClosedReinLoop>();
+            // The floor keeps every point of the loop above the wagon's rails, so the rein can never be
+            // pushed down through the cart by a fast hand movement.
+            SetFloat(loop, "minimumDeckHeight", deckHeight);
+            SetFloat(loop, "slack", ReinSlack);
             WireObject(loop, "vehicleRoot", vehicleRoot);
             WireObject(loop, "leftHorseHead", leftHorseHead);
             WireObject(loop, "leftGrip", leftRein.transform);
@@ -1249,8 +1554,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             CapsuleCollider capsule = grip.GetComponent<CapsuleCollider>();
             if (capsule != null)
             {
-                capsule.radius = 0.5f;
-                capsule.height = 2f;
+                capsule.radius = ReinGrabZoneRadius;
+                capsule.height = ReinGrabZoneLength;
                 capsule.direction = 1;
                 capsule.center = Vector3.zero;
             }
@@ -1268,6 +1573,11 @@ namespace JapaneseDemonHunter.GameplayEditor
                 SetBool(grabbable, "_throwWhenUnselected", false);
             }
 
+            foreach (Renderer renderer in grip.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.enabled = false;
+            }
+
             HandGrabInteractable gripInteractable = grip.GetComponentInChildren<HandGrabInteractable>(true);
             if (gripInteractable == null)
             {
@@ -1281,7 +1591,7 @@ namespace JapaneseDemonHunter.GameplayEditor
             var reinProperties = new SerializedObject(rein);
             reinProperties.Update();
             SetSerializedInt(reinProperties, "expectedHand", (int)expectedHand);
-            SetSerializedBool(reinProperties, "requireExpectedHand", false);
+            SetSerializedBool(reinProperties, "requireExpectedHand", true);
             SerializedProperty legacyZone = reinProperties.FindProperty("interactable");
             if (legacyZone != null)
             {
@@ -1541,6 +1851,233 @@ namespace JapaneseDemonHunter.GameplayEditor
             return source;
         }
 
+        /// <summary>Integrates two separate short rein grips without changing motor or spawner settings.</summary>
+        [MenuItem("Tools/Game/Integrate Separate Short Rein Grips (current scene)")]
+        public static void IntegrateSeparateReinGripsMenu()
+        {
+            if (!TryIntegrateSeparateReinGrips(out string report))
+            {
+                Debug.LogWarning(report);
+            }
+            else
+            {
+                Debug.Log(report);
+            }
+        }
+
+        private static bool TryIntegrateSeparateReinGrips(out string report)
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            if (scene.path != ScenePath)
+            {
+                report = $"Open {ScenePath} first; current scene is '{scene.path}'.";
+                return false;
+            }
+
+            GameObject vehicleRootObject = GameObject.Find("VehicleRoot");
+            ClosedReinLoop loop = vehicleRootObject != null
+                ? vehicleRootObject.GetComponentInChildren<ClosedReinLoop>(true)
+                : null;
+            if (vehicleRootObject == null || loop == null)
+            {
+                report = "VehicleRoot or ClosedReinLoop is missing; no scene objects were changed.";
+                return false;
+            }
+
+            ReinHandle[] reins = vehicleRootObject.GetComponentsInChildren<ReinHandle>(true);
+            ReinHandle left = System.Array.Find(
+                reins, rein => rein.name.StartsWith("Left", System.StringComparison.Ordinal));
+            ReinHandle right = System.Array.Find(
+                reins, rein => rein.name.StartsWith("Right", System.StringComparison.Ordinal));
+            if (reins.Length != 2 || left == null || right == null)
+            {
+                report = $"Expected exactly one left and one right ReinHandle, found {reins.Length}; no scene objects were changed.";
+                return false;
+            }
+
+            ReinGripIntegrationPlan leftPlan;
+            ReinGripIntegrationPlan rightPlan;
+            bool leftReady = TryPrepareReinGrip(left, out leftPlan);
+            bool rightReady = TryPrepareReinGrip(right, out rightPlan);
+            if (!leftReady || !rightReady)
+            {
+                report = "Both hand-grab zones and original tracked hand meshes must validate before integration; no scene objects were changed.";
+                return false;
+            }
+
+            if (!TryGetOriginalHandVisual(Handedness.Left, out Renderer leftHandVisual) ||
+                !TryGetOriginalHandVisual(Handedness.Right, out Renderer rightHandVisual))
+            {
+                report = "Could not resolve both active Oculus hand-mesh renderers safely; no scene objects were changed.";
+                return false;
+            }
+
+            Material gripMaterial = AssetDatabase.LoadAssetAtPath<Material>(ReinGripMaterialPath);
+            if (gripMaterial == null)
+            {
+                report = $"Required rein grip material was not found at {ReinGripMaterialPath}; no scene objects were changed.";
+                return false;
+            }
+
+            Undo.IncrementCurrentGroup();
+            int undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Integrate separate short rein grips");
+            try
+            {
+                ApplySeparateReinGrabZone(leftPlan, Handedness.Left);
+                ApplySeparateReinGrabZone(rightPlan, Handedness.Right);
+                SetReinHandleVisual(left, gripMaterial);
+                SetReinHandleVisual(right, gripMaterial);
+                CreateSeparateReinGripVisuals(
+                    left, right, leftHandVisual, rightHandVisual, gripMaterial);
+
+                Transform existingBar = vehicleRootObject.transform.Find("Shared_ReinBar");
+                if (existingBar != null && existingBar.gameObject.activeSelf)
+                {
+                    Undo.RecordObject(existingBar.gameObject, "Remove shared rein bar from view");
+                    existingBar.gameObject.SetActive(false);
+                }
+                EditorSceneManager.MarkSceneDirty(scene);
+                if (!EditorSceneManager.SaveScene(scene))
+                {
+                    throw new System.InvalidOperationException($"Unity could not save {ScenePath}.");
+                }
+
+                Undo.CollapseUndoOperations(undoGroup);
+                report = $"Separate short rein grips and hand visuals wired in {ScenePath}; motor and spawner settings were not changed.";
+                return true;
+            }
+            catch (System.Exception exception)
+            {
+                Undo.RevertAllDownToGroup(undoGroup);
+                report = $"Shared rein integration reverted in memory; verify the saved scene if saving failed: {exception.Message}";
+                return false;
+            }
+        }
+
+        private sealed class ReinGripIntegrationPlan
+        {
+            public ReinHandle rein;
+            public Transform zone;
+            public HandGrabInteractable interactable;
+            public bool createZone;
+        }
+
+        private static bool TryPrepareReinGrip(
+            ReinHandle rein, out ReinGripIntegrationPlan plan)
+        {
+            plan = null;
+            if (rein == null)
+            {
+                return false;
+            }
+
+            const string zoneName = "Rein_HandGrabZone";
+            Transform zone = rein.transform.Find(zoneName);
+            bool createZone = zone == null;
+            HandGrabInteractable interactable;
+            if (createZone)
+            {
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(RopeProxyPrefabPath);
+                interactable = prefab != null
+                    ? prefab.GetComponentInChildren<HandGrabInteractable>(true)
+                    : null;
+                if (interactable == null)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                interactable = zone.GetComponentInChildren<HandGrabInteractable>(true);
+                if (interactable == null)
+                {
+                    return false;
+                }
+            }
+
+            plan = new ReinGripIntegrationPlan
+            {
+                rein = rein,
+                zone = zone,
+                interactable = interactable,
+                createZone = createZone
+            };
+            return true;
+        }
+
+        private static void ApplySeparateReinGrabZone(ReinGripIntegrationPlan plan, Handedness expectedHand)
+        {
+            Transform zone = plan.zone;
+            if (plan.createZone)
+            {
+                GameObject zoneObject = InstantiatePrefab(RopeProxyPrefabPath, plan.rein.transform, Vector3.zero);
+                zoneObject.name = "Rein_HandGrabZone";
+                zone = zoneObject.transform;
+                zone.localScale = Vector3.one;
+                Undo.RegisterCreatedObjectUndo(zoneObject, "Create separate rein hand grab zone");
+                plan.interactable = zone.GetComponentInChildren<HandGrabInteractable>(true);
+            }
+
+            foreach (Renderer renderer in zone.GetComponentsInChildren<Renderer>(true))
+            {
+                Undo.RecordObject(renderer, "Hide SDK grip proxy visuals");
+                renderer.enabled = false;
+            }
+            ConfigureGrabProxyWithUndo(zone.gameObject);
+
+            HandGrabInteractable rootInteractable = plan.rein.GetComponent<HandGrabInteractable>();
+            if (rootInteractable != null)
+            {
+                Undo.RecordObject(rootInteractable, "Separate rein grab transform from pin");
+                rootInteractable.enabled = false;
+            }
+
+            foreach (Collider collider in plan.rein.GetComponents<Collider>())
+            {
+                Undo.RecordObject(collider, "Disable competing rein pin collider");
+                collider.enabled = false;
+            }
+
+            Undo.RecordObject(plan.rein, "Assign rein hand ownership");
+            var serialized = new SerializedObject(plan.rein);
+            serialized.Update();
+            SetSerializedInt(serialized, "expectedHand", (int)expectedHand);
+            SetSerializedBool(serialized, "requireExpectedHand", true);
+            SerializedProperty legacy = serialized.FindProperty("interactable");
+            if (legacy != null)
+            {
+                legacy.objectReferenceValue = null;
+            }
+
+            SerializedProperty zones = serialized.FindProperty("grabPoints");
+            if (zones != null)
+            {
+                zones.arraySize = 1;
+                zones.GetArrayElementAtIndex(0).objectReferenceValue = plan.interactable;
+            }
+            serialized.ApplyModifiedProperties();
+            EditorUtility.SetDirty(plan.rein);
+        }
+
+        private static void ConfigureGrabProxyWithUndo(GameObject grabZone)
+        {
+            foreach (MonoBehaviour behaviour in grabZone.GetComponents<MonoBehaviour>())
+            {
+                Undo.RecordObject(behaviour, "Configure rein grab proxy");
+            }
+            foreach (Collider collider in grabZone.GetComponents<Collider>())
+            {
+                Undo.RecordObject(collider, "Configure rein grab proxy collider");
+            }
+            Rigidbody body = grabZone.GetComponent<Rigidbody>();
+            if (body != null)
+            {
+                Undo.RecordObject(body, "Configure rein grab proxy body");
+            }
+            ConfigureReinGrabProxy(grabZone);
+        }
+
         /// <summary>Adds the handles and the whip speed tuning to the scene that is already open.</summary>
         [MenuItem("Tools/Game/Use Unified Reins (current scene)")]
         public static void ApplyWhipSetupMenu()
@@ -1614,10 +2151,13 @@ namespace JapaneseDemonHunter.GameplayEditor
                 return false;
             }
 
-            bool leftGripReady = ConfigureUnifiedReinGrip(
-                vehicleRootObject.transform, "Left_ReinPin", Handedness.Left);
-            bool rightGripReady = ConfigureUnifiedReinGrip(
-                vehicleRootObject.transform, "Right_ReinPin", Handedness.Right);
+            if (!TryIntegrateSeparateReinGrips(out string gripReport))
+            {
+                report = gripReport;
+                return false;
+            }
+            bool leftGripReady = true;
+            bool rightGripReady = true;
             DisableDetachedWhipHandles(vehicleRootObject.transform);
             SetFloat(motor, "accelerationPerStroke", WhipAccelerationPerStroke);
             SetFloat(motor, "coastingDeceleration", WhipCoastingDeceleration);
@@ -1656,17 +2196,24 @@ namespace JapaneseDemonHunter.GameplayEditor
             SetFloat(road, "tileLength", 18f);
             SetFloat(road, "roadWidth", 9.6f);
             SetFloat(road, "laneWidth", 2.8f);
+            SetBool(road, "buildLaneDividers", false);
+            SetBool(road, "buildRoadForks", false);
             SetFloat(road, "curvatureScale", 0.8f);
             SetFloat(road, "turnRadius", 100f);
             SetFloat(road, "heightAmplitude", 0.55f);
             SetFloat(road, "heightWavelength", 90f);
             SetFloat(road, "forkDivergence", 6f);
-            // A dense wall of real tree models on both sides. Six per row covers the whole tile length
-            // with no seam, and four rows at 5.5 m reach past the fog's start so the only open ground
-            // left in view is the carriageway itself.
-            SetInt(road, "forestRows", 4);
-            SetInt(road, "treesPerRow", 6);
+            // Three rows of five covers the carriageway's whole length and still fills the sides; the
+            // rows reach past the fog so only the road itself stays open. Kept deliberately modest
+            // because foliage is the heaviest thing in the scene, and each tile switches as one batch.
+            SetInt(road, "forestRows", 3);
+            SetInt(road, "farForestRows", 2);
+            SetInt(road, "treesPerRow", 5);
             SetFloat(road, "forestRowSpacing", 5.5f);
+            SetBool(road, "buildDecorativeEdgeStones", true);
+            SetInt(road, "edgeStonePairsPerTile", 2);
+            SetInt(road, "treeBatchChunkSpan", TreeBatchChunkSpan);
+            SetInt(road, "lanternLitChunkSpan", PostLanternLitChunkSpan);
             SetInt(road, "totalTiles", TotalRoadTiles);
             WireObject(road, "vehicleRoot", vehicleRoot);
             WireObject(road, "rockPrefab", AssetDatabase.LoadAssetAtPath<GameObject>(RockModelPath));
@@ -1692,6 +2239,8 @@ namespace JapaneseDemonHunter.GameplayEditor
             // carriageway had nothing to stand out against and read as part of the same surface.
             ground.GetComponent<Renderer>().sharedMaterial =
                 GetOrCreateLitMaterial("Mat_ForestFloor", new Color(0.07f, 0.15f, 0.06f));
+            // A six hundred metre plane casts nothing anyone will ever see, so it stops casting.
+            ground.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             ground.transform.localScale = new Vector3(60f, 1f, 60f);
             // Seated at the carriage's own height so the edit-time scene view agrees with where
             // CartFollowGround puts it at runtime; otherwise the carriage reads as floating here.
@@ -1715,7 +2264,8 @@ namespace JapaneseDemonHunter.GameplayEditor
 
             GameObject rig = (GameObject)PrefabUtility.InstantiatePrefab(rigPrefab, vehicleRoot);
             rig.name = "OVRCameraRig";
-            rig.transform.localPosition = new Vector3(0f, 0.695f, 0f);
+            // Seated a little forward of the cart's centre so the hunter is not at the very back of the bed.
+            rig.transform.localPosition = new Vector3(0f, 0.695f, -0.6f);
             rig.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
 
             ConfigureOvrManager(rig);
@@ -1773,7 +2323,10 @@ namespace JapaneseDemonHunter.GameplayEditor
                 var serialized = new SerializedObject(behaviour);
                 SetSerializedInt(serialized, "_trackingOriginType", 1);
                 SetSerializedBool(serialized, "_enableDynamicResolution", true);
-                SetSerializedInt(serialized, "controllerDrivenHandPosesType", 1);
+                // HandsOnly project: the hands must come from hand tracking alone. ConformingToController
+                // makes the runtime pose them from a controller, and with no controller paired that
+                // leaves the hands with no tracked pose at all — the hand tracking looks dead.
+                SetSerializedInt(serialized, "controllerDrivenHandPosesType", 0);
                 serialized.ApplyModifiedPropertiesWithoutUndo();
                 return;
             }
@@ -1961,7 +2514,7 @@ namespace JapaneseDemonHunter.GameplayEditor
                         movementType = MonsterMovementType.Flying,
                         spawnDirection = MonsterSpawnDirection.FrontLane,
                         isFaceThreat = true,
-                        frontLaneForwardRadius = 12f,
+                        frontLaneForwardRadius = BatRoundApproachRadius,
                         weight = 1f,
                         minimumFlyingHeight = 3.5f,
                         maximumFlyingHeight = 7f,
@@ -1978,15 +2531,21 @@ namespace JapaneseDemonHunter.GameplayEditor
             WireObject(spawner, "rearReachPoint", rearAnchor);
             FaceBatThreatController faceThreat = systemObject.AddComponent<FaceBatThreatController>();
             faceThreat.Configure(spawner, headAnchor);
+            SetInt(faceThreat, "batsPerRound", BatRoundSize);
+            SetFloat(faceThreat, "betweenRounds", BatRoundCooldown);
 
             // The delay starts only after the first valid two-handed gallop.
             spawner.ConfigureFirstGallopSource(vehicleRoot.GetComponent<CarriageMotor>());
             spawner.ConfigureTiming(false, SecondsBeforeFirstMonster, MonsterSpawnInterval, true);
+            // A permanent horde behind the cart, of which only a few run fast enough to catch it.
+            spawner.ConfigureHorde(MinimumHordeSize, FastHordeFraction, FastHordeSpeedMultiplier);
+            SetInt(spawner, "maximumActiveMonsters", MinimumHordeSize + BatRoundSize + 1);
 
             GiantZombieSpawner giantSpawner = systemObject.AddComponent<GiantZombieSpawner>();
             GameObject giantPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(GiantPrefabPath);
             giantSpawner.Configure(giantPrefab, vehicleRoot, rearAnchor, 22f, ~0);
             giantSpawner.ConfigureSpeedTrigger(true, 1.4f, 2.5f, vehicleRoot.GetComponent<CarriageMotor>(), 30f);
+            SetBool(giantSpawner, "showGiantBehindHorde", true);
 
             CreateRearReachPoint(vehicleRoot, rearAnchor);
             return systemObject;
@@ -2022,6 +2581,21 @@ namespace JapaneseDemonHunter.GameplayEditor
             points.Add(CreateAttachmentPoint(vehicleRoot, "Attach_RightRearFlying",
                 new Vector3(1.85f, 1.75f, rearZ + 0.95f), MonsterAttachmentKind.Flying, 1));
             return points;
+        }
+
+        /// <summary>
+        /// Local Y of the wagon's rail top, expressed under the vehicle root. The rope and the grips
+        /// are placed just above it so the rein rides over the cart instead of through it.
+        /// </summary>
+        private static float GetWagonTopLocalY(Transform vehicleRoot)
+        {
+            GameObject wagon = GameObject.Find("Wagon_Model");
+            if (wagon != null && TryGetRendererBounds(wagon, out Bounds bed))
+            {
+                return bed.max.y - vehicleRoot.position.y;
+            }
+
+            return 0.83f;
         }
 
         /// <summary>
@@ -2224,16 +2798,31 @@ namespace JapaneseDemonHunter.GameplayEditor
             ValidateCarriageLamps(failures);
 
             ReinHandle[] reins = Object.FindObjectsByType<ReinHandle>();
-            Require(reins.Length == 2, "Two visible end grips exist on the continuous rein.", failures);
+            Require(reins.Length == 2, "Two separate short hand grips exist on the continuous rein.", failures);
             foreach (ReinHandle rein in reins)
             {
                 Require(rein.GrabPointCount == 1,
-                    $"{rein.name} is one hand-grabbable end grip (found {rein.GrabPointCount} grab points).", failures);
-                Require(rein.GetComponentInChildren<Renderer>(true) != null,
-                    $"{rein.name} is a visible handle attached to the rope endpoint.", failures);
-                Require(rein.RestLocalPosition.y <= 1.0f,
-                    $"{rein.name} hangs down at deck height so it can be lifted and yanked.", failures);
+                    $"{rein.name} is assigned one hand-grabbable zone (found {rein.GrabPointCount} grab points).", failures);
+                Renderer handleRenderer = rein.GetComponent<Renderer>();
+                Require(handleRenderer != null && handleRenderer.enabled,
+                    $"{rein.name} has its own visible short handle.", failures);
+                Require(Mathf.Approximately(rein.transform.localScale.y, ReinHandleVisualLength * 0.5f),
+                    $"{rein.name} uses the configured {ReinHandleVisualLength:F2} m handle length.", failures);
+                Transform zone = rein.transform.Find("Rein_HandGrabZone");
+                CapsuleCollider grabCollider = zone != null ? zone.GetComponent<CapsuleCollider>() : null;
+                Require(grabCollider != null &&
+                        Mathf.Approximately(grabCollider.radius, ReinGrabZoneRadius) &&
+                        Mathf.Approximately(grabCollider.height, ReinGrabZoneLength),
+                    $"{rein.name} uses the reduced, separate hand-grab zone.", failures);
+                Require(rein.RestLocalPosition.y <= 1.6f,
+                    $"{rein.name} rests low enough to be lifted and yanked.", failures);
+                Require(rein.RestLocalPosition.y > GetWagonTopLocalY(rein.transform.parent),
+                    $"{rein.name} rides above the wagon's rails so the rein never cuts through it.", failures);
             }
+
+            Transform sharedBar = GameObject.Find("Shared_ReinBar")?.transform;
+            Require(sharedBar == null || !sharedBar.gameObject.activeInHierarchy,
+                "No shared bar connects the two separate rein grips.", failures);
 
             HandGrabInteractor[] handInteractors =
                 Object.FindObjectsByType<HandGrabInteractor>(FindObjectsInactive.Include);
@@ -2648,13 +3237,12 @@ namespace JapaneseDemonHunter.GameplayEditor
             // The look is re-asserted on every run rather than only when the asset is first created, so
             // tuning the night does not require deleting the material by hand.
             var material = existing != null ? existing : new Material(shader) { name = name };
-            // Darker and far less blue than before; the moon disk is made much larger and the exposure
-            // raised slightly, so the sky itself stays night-dark while the moon reads bright.
-            material.SetColor("_SkyTint", new Color(0.022f, 0.026f, 0.042f));
-            material.SetColor("_GroundColor", new Color(0.006f, 0.006f, 0.009f));
+            // Keep the sky near black and the moon disk small with a crisp edge.
+            material.SetColor("_SkyTint", new Color(0.008f, 0.010f, 0.016f));
+            material.SetColor("_GroundColor", new Color(0.003f, 0.003f, 0.004f));
             material.SetFloat("_AtmosphereThickness", 0.75f);
-            material.SetFloat("_SunSize", 0.075f);
-            material.SetFloat("_SunSizeConvergence", 2f);
+            material.SetFloat("_SunSize", 0.035f);
+            material.SetFloat("_SunSizeConvergence", 4f);
             material.SetFloat("_Exposure", 0.62f);
             if (existing == null)
             {
@@ -2785,6 +3373,37 @@ namespace JapaneseDemonHunter.GameplayEditor
             if (property != null)
             {
                 property.intValue = value;
+            }
+        }
+
+        /// <summary>
+        /// Writes a number to whichever serialized field it is, picking the accessor from the property's
+        /// own type. Writing intValue into a float field, or into an enum, silently produces zero.
+        /// </summary>
+        private static void SetSerializedNumber(SerializedObject serialized, string fieldName, float value)
+        {
+            SerializedProperty property = serialized.FindProperty(fieldName);
+            if (property == null)
+            {
+                Debug.LogWarning($"Serialized field '{fieldName}' was not found on {serialized.targetObject}.");
+                return;
+            }
+
+            switch (property.propertyType)
+            {
+                case SerializedPropertyType.Float:
+                    property.floatValue = value;
+                    break;
+                case SerializedPropertyType.Integer:
+                    property.intValue = Mathf.RoundToInt(value);
+                    break;
+                case SerializedPropertyType.Enum:
+                    property.enumValueIndex = Mathf.RoundToInt(value);
+                    break;
+                default:
+                    Debug.LogWarning(
+                        $"Serialized field '{fieldName}' is a {property.propertyType} and was not set.");
+                    break;
             }
         }
 
@@ -2959,6 +3578,8 @@ namespace JapaneseDemonHunter.GameplayEditor
                 return;
             }
 
+            Require(giantSpawner.ShowsGiantBehindHorde,
+                "The giant stays visible behind the horde before the low-speed defeat trigger arms.", failures);
             Transform cart = giantSpawner.CartTransform;
             Require(cart != null, "The giant spawner knows the carriage transform.", failures);
             if (cart == null)

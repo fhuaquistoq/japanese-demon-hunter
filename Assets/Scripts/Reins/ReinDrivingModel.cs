@@ -35,6 +35,7 @@ namespace Reins
         private readonly float _liftWindowSeconds;
         private readonly float _minimumDropSpeed;
         private readonly bool _brakeEnabled;
+        private readonly bool _laneEnabled;
 
         private float _cooldown;
         private float _liftAge;
@@ -53,7 +54,8 @@ namespace Reins
             float cooldownSeconds = 0.4f,
             float liftWindowSeconds = 3f,
             float minimumDropSpeed = 0.35f,
-            bool brakeEnabled = true)
+            bool brakeEnabled = true,
+            bool laneEnabled = true)
         {
             _liftThreshold = liftThreshold;
             _dropThreshold = dropThreshold;
@@ -64,6 +66,7 @@ namespace Reins
             _liftWindowSeconds = liftWindowSeconds;
             _minimumDropSpeed = minimumDropSpeed;
             _brakeEnabled = brakeEnabled;
+            _laneEnabled = laneEnabled;
         }
 
         public ReinGesture Step(bool heldByTrackedHand, Vector3 pull, float deltaTime)
@@ -122,7 +125,7 @@ namespace Reins
                     return Fire(ReinGestureKind.Brake, 0);
                 }
 
-                if (Mathf.Abs(pull.x) >= _laneThreshold)
+                if (_laneEnabled && Mathf.Abs(pull.x) >= _laneThreshold)
                 {
                     return Fire(ReinGestureKind.LanePull, pull.x < 0f ? -1 : 1);
                 }

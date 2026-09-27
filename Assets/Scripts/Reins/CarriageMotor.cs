@@ -6,7 +6,7 @@ namespace Reins
 {
     /// <summary>Moves the carriage, horses, reins, and tracking rig together without rotating the rider.</summary>
     public sealed class CarriageMotor : MonoBehaviour, ICartSpeedPenaltyReceiver, ICartAccelerationRequester,
-        ICartFirstGallopSource
+        ICartFirstGallopSource, ICartInputBlocker
     {
         [SerializeField] private ReinHandle leftRein;
         [SerializeField] private ReinHandle rightRein;
@@ -60,8 +60,10 @@ namespace Reins
         private float _speed;
         private int _lane;
         private bool _firstGallopRaised;
+        private bool _inputBlocked;
         private CartHitPenaltyModel _hitPenalty;
 
+        public bool IsInputBlocked => _inputBlocked;
         public float Speed => _speed;
         public int Lane => _lane;
         public ReinHandle LeftRein => leftRein;
@@ -123,13 +125,21 @@ namespace Reins
             HitPenalty.Tick(deltaTime, hitPenaltyRecoverySeconds);
             leftRein?.UpdateGrip(deltaTime);
             rightRein?.UpdateGrip(deltaTime);
-            ReinGesture gesture = _reinGestures.Step(
-                leftRein != null && leftRein.IsHeldByExpectedHand,
-                rightRein != null && rightRein.IsHeldByExpectedHand,
-                leftRein != null ? leftRein.Pull : Vector3.zero,
-                rightRein != null ? rightRein.Pull : Vector3.zero,
-                deltaTime);
-            Apply(gesture);
+            if (_inputBlocked)
+            {
+                _reinGestures.Step(false, false, Vector3.zero, Vector3.zero, deltaTime);
+                LastCommand = ReinGestureKind.None;
+            }
+            else
+            {
+                ReinGesture gesture = _reinGestures.Step(
+                    leftRein != null && leftRein.IsHeldByExpectedHand,
+                    rightRein != null && rightRein.IsHeldByExpectedHand,
+                    leftRein != null ? leftRein.Pull : Vector3.zero,
+                    rightRein != null ? rightRein.Pull : Vector3.zero,
+                    deltaTime);
+                Apply(gesture);
+            }
 
             if (!_stopModel.IsStopped)
             {
@@ -198,9 +208,19 @@ namespace Reins
             LoadModel.ReportSpeed(_speed);
         }
 
+        public void SetInputBlocked(bool blocked)
+        {
+            _inputBlocked = blocked;
+        }
+
         /// <summary>Integration point for external systems that request a lash of the reins.</summary>
         public void RequestAcceleration()
         {
+            if (_inputBlocked)
+            {
+                return;
+            }
+
             _speed = _stopModel.Accelerate(_speed, StrokeAcceleration, CurrentSpeedCeiling);
         }
 

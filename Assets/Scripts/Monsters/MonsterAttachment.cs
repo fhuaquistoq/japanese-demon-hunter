@@ -126,7 +126,8 @@ namespace JapaneseDemonHunter.Monsters
             attachElapsed = 0f;
             if (reservedPoint != null)
             {
-                if (transform.parent == reservedPoint.transform)
+                Transform anchor = reservedPoint.transform;
+                if (transform.parent == anchor && CanReparent(anchor))
                 {
                     transform.SetParent(originalParent, true);
                 }
@@ -158,6 +159,16 @@ namespace JapaneseDemonHunter.Monsters
         public void SetLoadContribution(float configuredLoad)
         {
             loadContribution = Mathf.Max(0f, configuredLoad);
+        }
+
+        /// <summary>
+        /// Reparenting throws when the anchor is itself being activated or deactivated, which happens
+        /// when the cart is torn down with a monster still hanging on it. The reservation and the load
+        /// are released either way, so the reparent is simply skipped in that case.
+        /// </summary>
+        private static bool CanReparent(Transform anchor)
+        {
+            return anchor != null && anchor.gameObject.activeInHierarchy;
         }
 
         private void OnDisable()

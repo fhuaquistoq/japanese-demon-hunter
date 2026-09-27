@@ -39,9 +39,23 @@ namespace JapaneseDemonHunter.Monsters
 
         public override void TickMoveTowards(Vector3 destination, float speed, float deltaTime)
         {
-            float minimumWorldHeight = PatrolCenter.y + minimumHeight;
-            float maximumWorldHeight = PatrolCenter.y + Mathf.Max(minimumHeight, maximumHeight);
-            destination.y = Mathf.Clamp(destination.y, minimumWorldHeight, maximumWorldHeight);
+            TickMoveTowardsInternal(destination, speed, deltaTime, true);
+        }
+
+        public void TickMoveTowardsFace(Vector3 destination, float speed, float deltaTime)
+        {
+            TickMoveTowardsInternal(destination, speed, deltaTime, false);
+        }
+
+        private void TickMoveTowardsInternal(Vector3 destination, float speed, float deltaTime,
+            bool standardFlight)
+        {
+            if (standardFlight)
+            {
+                float minimumWorldHeight = PatrolCenter.y + minimumHeight;
+                float maximumWorldHeight = PatrolCenter.y + Mathf.Max(minimumHeight, maximumHeight);
+                destination.y = Mathf.Clamp(destination.y, minimumWorldHeight, maximumWorldHeight);
+            }
 
             Vector3 direction = destination - transform.position;
             if (direction.sqrMagnitude < 0.0025f)
@@ -51,7 +65,10 @@ namespace JapaneseDemonHunter.Monsters
             }
 
             direction.Normalize();
-            direction = ApplyObstacleAvoidance(direction);
+            if (standardFlight)
+            {
+                direction = ApplyObstacleAvoidance(direction);
+            }
             Vector3 desiredVelocity = direction * Mathf.Max(0f, speed);
             velocity = Vector3.MoveTowards(velocity, desiredVelocity, acceleration * deltaTime);
             transform.position += velocity * deltaTime;

@@ -21,6 +21,7 @@ namespace JapaneseDemonHunter.Monsters
 
         [Header("Aparición por velocidad (opcional)")]
         [SerializeField] private bool spawnWhenSpeedDrops;
+        [SerializeField] private bool showGiantBehindHorde;
         [SerializeField, Min(0f)] private float speedThreshold = 1.5f;
         [SerializeField, Min(0f)] private float slowSpeedDuration = 2.5f;
         [SerializeField, Min(0f)] private float armDistance = 30f;
@@ -42,6 +43,7 @@ namespace JapaneseDemonHunter.Monsters
         public float InitialDistance => initialDistance;
         public float RetryInterval => retryInterval;
         public bool SpawnWhenSpeedDrops => spawnWhenSpeedDrops;
+        public bool ShowsGiantBehindHorde => showGiantBehindHorde;
         public float SpeedThreshold => speedThreshold;
         public float SlowSpeedDuration => slowSpeedDuration;
         public float ArmDistance => armDistance;
@@ -57,7 +59,10 @@ namespace JapaneseDemonHunter.Monsters
                     startCaptured = true;
                 }
 
-                return;
+                if (!showGiantBehindHorde)
+                {
+                    return;
+                }
             }
 
             TrySpawnGiant();
@@ -67,10 +72,16 @@ namespace JapaneseDemonHunter.Monsters
         {
             if (spawnedGiant != null)
             {
+                if (showGiantBehindHorde && spawnWhenSpeedDrops &&
+                    spawnedGiant.IsTrailingBehindCart && HasStayedSlowLongEnough(Time.deltaTime))
+                {
+                    spawnedGiant.BeginFinalChase();
+                }
+
                 return;
             }
 
-            if (spawnWhenSpeedDrops && !HasStayedSlowLongEnough(Time.deltaTime))
+            if (spawnWhenSpeedDrops && !showGiantBehindHorde && !HasStayedSlowLongEnough(Time.deltaTime))
             {
                 return;
             }
@@ -169,6 +180,11 @@ namespace JapaneseDemonHunter.Monsters
 
             spawnedGiant.SetChaseSpeed(giantChaseSpeed);
             spawnedGiant.Initialize(cartTransform, cartRearReachPoint);
+            if (showGiantBehindHorde)
+            {
+                spawnedGiant.BeginTrailing(initialDistance);
+            }
+
             GiantSpawned?.Invoke(spawnedGiant);
             return true;
         }

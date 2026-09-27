@@ -16,6 +16,11 @@ namespace JapaneseDemonHunter.Prototype
         void RequestAcceleration();
     }
 
+    public interface ICartInputBlocker
+    {
+        void SetInputBlocked(bool blocked);
+    }
+
     /// <summary>Raised once when the player performs the first valid reins gallop.</summary>
     public interface ICartFirstGallopSource
     {

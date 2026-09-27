@@ -24,12 +24,15 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField, Range(0.5f, 2f)] private float locomotionAnimationSpeed = 1.15f;
 
         private bool chasing;
+        private bool trailingBehindCart;
+        private float trailingDistance;
         private bool caughtNotificationSent;
         private Renderer[] renderers;
         private Animator[] animators;
         private bool visualsVisible;
 
         public bool IsChasing => chasing;
+        public bool IsTrailingBehindCart => trailingBehindCart;
         public bool IsVisible => visualsVisible;
         public bool HasCaughtCart => caughtNotificationSent;
         public float ChaseSpeed => chaseSpeed;
@@ -58,16 +61,42 @@ namespace JapaneseDemonHunter.Monsters
             cartRearReachPoint = configuredRearPoint;
             caughtNotificationSent = false;
             chasing = cartTransform != null && cartRearReachPoint != null;
+            trailingBehindCart = false;
             renderers = GetComponentsInChildren<Renderer>(true);
             animators = GetComponentsInChildren<Animator>(true);
             SetVisuals(false);
             animationController?.PlayLocomotion(locomotionAnimationSpeed);
         }
 
+        public void BeginTrailing(float distance)
+        {
+            if (!chasing)
+            {
+                return;
+            }
+
+            trailingDistance = Mathf.Max(0f, distance);
+            trailingBehindCart = true;
+            SnapToGround();
+            SetVisuals(true);
+            animationController?.PlayLocomotion(locomotionAnimationSpeed);
+        }
+
+        public void BeginFinalChase()
+        {
+            trailingBehindCart = false;
+        }
+
         public void TickChase(float deltaTime)
         {
             if (!chasing || cartTransform == null || cartRearReachPoint == null || deltaTime <= 0f)
             {
+                return;
+            }
+
+            if (trailingBehindCart)
+            {
+                TickTrailing(deltaTime);
                 return;
             }
 
@@ -124,6 +153,31 @@ namespace JapaneseDemonHunter.Monsters
             transform.position = candidate;
             Quaternion desired = Quaternion.LookRotation(direction, Vector3.up);
             transform.rotation = Quaternion.Slerp(transform.rotation, desired, 1f - Mathf.Exp(-rotationSharpness * deltaTime));
+        }
+
+        private void TickTrailing(float deltaTime)
+        {
+            Vector3 rearDirection = Vector3.ProjectOnPlane(
+                cartRearReachPoint.position - cartTransform.position, Vector3.up);
+            if (rearDirection.sqrMagnitude < 0.001f)
+            {
+                rearDirection = cartTransform.forward;
+            }
+
+            Vector3 candidate = cartTransform.position + rearDirection.normalized * trailingDistance;
+            candidate.y = TryFindGround(candidate, out RaycastHit groundHit)
+                ? groundHit.point.y
+                : transform.position.y;
+            transform.position = candidate;
+
+            Vector3 facingCart = cartRearReachPoint.position - candidate;
+            facingCart.y = 0f;
+            if (facingCart.sqrMagnitude > 0.001f)
+            {
+                Quaternion desired = Quaternion.LookRotation(facingCart, Vector3.up);
+                transform.rotation = Quaternion.Slerp(transform.rotation, desired,
+                    1f - Mathf.Exp(-rotationSharpness * deltaTime));
+            }
         }
 
         private void SetVisuals(bool visible)

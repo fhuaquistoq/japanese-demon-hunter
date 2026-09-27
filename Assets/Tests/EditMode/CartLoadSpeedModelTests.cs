@@ -131,6 +131,32 @@ namespace Reins.Tests
         }
 
         [Test]
+        public void FaceThreatBlocksAccelerationAndReleasesItThroughTheSharedContract()
+        {
+            GameObject cart = new GameObject("BatThreatCart");
+            try
+            {
+                CarriageMotor motor = cart.AddComponent<CarriageMotor>();
+                ICartInputBlocker blocker = motor;
+                float initialSpeed = motor.Speed;
+
+                blocker.SetInputBlocked(true);
+                motor.RequestAcceleration();
+                Assert.IsTrue(motor.IsInputBlocked);
+                Assert.AreEqual(initialSpeed, motor.Speed, 0.0001f);
+
+                blocker.SetInputBlocked(false);
+                motor.RequestAcceleration();
+                Assert.IsFalse(motor.IsInputBlocked);
+                Assert.Greater(motor.Speed, initialSpeed);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(cart);
+            }
+        }
+
+        [Test]
         public void TheModelSatisfiesTheCartIntegrationContract()
         {
             ICartSpeedPenaltyReceiver receiver = new CartLoadSpeedModel(3f);

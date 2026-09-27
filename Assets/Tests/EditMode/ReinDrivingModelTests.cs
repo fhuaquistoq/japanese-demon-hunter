@@ -42,6 +42,17 @@ namespace Reins.Tests
                 machine.Step(false, new Vector3(0.4f, 0f, 0f), 0.016f).Kind);
         }
 
+        [Test]
+        public void DisabledLaneGestureDoesNotEmitOrConsumeTheSidewaysPull()
+        {
+            var machine = new ReinGestureStateMachine(laneEnabled: false);
+
+            Assert.AreEqual(ReinGestureKind.None,
+                machine.Step(true, new Vector3(0.4f, 0f, 0f), 0.016f).Kind);
+            Assert.AreEqual(ReinGestureKind.None,
+                machine.Step(true, new Vector3(0f, 0.2f, 0f), 0.016f).Kind);
+        }
+
         [TestCase(Handedness.Left, Handedness.Left, true, true, true, true)]
         [TestCase(Handedness.Left, Handedness.Right, true, true, true, false)]
         [TestCase(Handedness.Right, Handedness.Right, true, false, true, false)]

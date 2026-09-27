@@ -7,6 +7,32 @@ namespace Reins.Tests
     public sealed class ForestRoadTests
     {
         [Test]
+        public void DefaultsToSingleUnmarkedCurvedRoadWithThreeNearAndTwoFarForestRows()
+        {
+            var roadObject = new GameObject("ForestRoadDefaultsTest");
+            var road = roadObject.AddComponent<ForestRoad>();
+            try
+            {
+                RoadPathModel path = road.CreatePathModel();
+                Assert.IsFalse(path.HasForks);
+                Assert.Greater(Mathf.Abs(path.GetChunkHeading(20)), 1f);
+                Assert.AreEqual(3, (int)typeof(ForestRoad).GetField(
+                    "forestRows", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(road));
+                Assert.AreEqual(2, (int)typeof(ForestRoad).GetField(
+                    "farForestRows", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(road));
+                var createPixels = typeof(ForestRoad).GetMethod(
+                    "CreateDirtPixels", BindingFlags.Instance | BindingFlags.NonPublic);
+                var pixels = (Color[])createPixels.Invoke(road, new object[] { 128 });
+                Assert.AreNotEqual(new Color(0.66f, 0.57f, 0.39f), pixels[64 * 128 + 45]);
+                Assert.AreNotEqual(new Color(0.66f, 0.57f, 0.39f), pixels[64 * 128 + 82]);
+            }
+            finally
+            {
+                Object.DestroyImmediate(roadObject);
+            }
+        }
+
+        [Test]
         public void GeneratedRoadTextureBakesInspectorConfiguredLaneDividers()
         {
             var roadObject = new GameObject("ForestRoadTextureTest");
@@ -15,6 +41,7 @@ namespace Reins.Tests
             SetPrivateField(road, "laneMarkingColor", markingColor);
             SetPrivateField(road, "laneMarkingStrength", 1f);
             SetPrivateField(road, "laneMarkingWidth", 0.09f);
+            SetPrivateField(road, "buildLaneDividers", true);
 
             var createPixels = typeof(ForestRoad).GetMethod("CreateDirtPixels", BindingFlags.Instance | BindingFlags.NonPublic);
             var pixels = (Color[])createPixels.Invoke(road, new object[] { 128 });

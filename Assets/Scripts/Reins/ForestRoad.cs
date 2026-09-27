@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Reins
 {
@@ -14,6 +15,7 @@ namespace Reins
         [SerializeField, Min(0.1f)] private float laneMarkingWidth = 0.09f;
         [SerializeField] private Color laneMarkingColor = new Color(0.66f, 0.57f, 0.39f);
         [SerializeField, Range(0f, 1f)] private float laneMarkingStrength = 0.72f;
+        [SerializeField] private bool buildLaneDividers;
         [SerializeField] private Transform vehicleRoot;
         [SerializeField, Min(0.1f)] private float stoneLaneWidth = 1.15f;
         [SerializeField, Min(0.1f)] private float stoneDepth = 0.65f;
@@ -26,15 +28,28 @@ namespace Reins
         [SerializeField, Range(0f, 1f)] private float heightAmplitude = 0.55f;
         [SerializeField, Min(25f)] private float heightWavelength = 90f;
         [SerializeField, Range(0f, 10f)] private float forkDivergence = 6f;
+        [SerializeField] private bool buildRoadForks;
 
         [Header("Modelos reales (opcional)")]
         [SerializeField] private GameObject[] treePrefabs;
         [SerializeField] private GameObject rockPrefab;
         [SerializeField, Min(1f)] private float treeHeight = 7f;
         [SerializeField, Range(1, 6)] private int forestRows = 3;
+        [SerializeField, Range(0, 4)] private int farForestRows = 2;
         [SerializeField, Range(3, 10)] private int treesPerRow = 5;
         [SerializeField, Min(1f)] private float forestRowSpacing = 5f;
+        [SerializeField] private bool buildDecorativeEdgeStones = true;
+        [SerializeField, Range(1, 3)] private int edgeStonePairsPerTile = 2;
         [SerializeField, Min(0.05f)] private float rockFootprintPadding = 1f;
+        [Tooltip("Foliage is the densest thing in the scene, so its shadows are switched off: hundreds " +
+                 "of extra shadow casters cost far more than they add at night.")]
+        [SerializeField] private bool castSceneryShadows;
+        [Tooltip("How many tiles either side of the carriage keep their trees enabled. Beyond this they " +
+                 "are switched off in one go, per tile, instead of being culled one by one.")]
+        [SerializeField, Range(0, 6)] private int treeBatchChunkSpan = 3;
+        [Tooltip("How close to the end of the road the kingdom is switched on. It is far more geometry " +
+                 "than anything else in the scene and is invisible until the last stretch.")]
+        [SerializeField, Min(0f)] private float kingdomRevealDistance = 90f;
 
         [Header("Faroles de la carretera (opcional)")]
         [SerializeField] private GameObject postLanternPrefab;
@@ -64,6 +79,10 @@ namespace Reins
         private Material _leafMaterial;
         private Material _stoneMaterial;
         private Texture2D _dirtTexture;
+        private Texture2D _barkTexture;
+        private Texture2D _leafTexture;
+        private Texture2D _owlEyesTexture;
+        private Sprite _owlEyesSprite;
 
         private bool _initialized;
         private int _nextChunkIndex;
@@ -78,6 +97,16 @@ namespace Reins
         public int TotalTiles => totalTiles;
         public bool HasKingdom => _kingdom != null;
 
+        private int TotalForestRows => Mathf.Max(1, forestRows) + Mathf.Max(0, farForestRows);
+
+        private float GetForestRowOffset(int row)
+        {
+            int nearRows = Mathf.Max(1, forestRows);
+            return row < nearRows
+                ? row * forestRowSpacing
+                : nearRows * forestRowSpacing + (row - nearRows + 1) * forestRowSpacing * 1.25f;
+        }
+
         private sealed class Tile
         {
             public Transform root;
@@ -85,6 +114,7 @@ namespace Reins
             public readonly Transform[] stones = new Transform[3];
             public readonly Transform[] branches = new Transform[2];
             public Transform mainRoad;
+            public Transform treeBatch;
             public readonly bool[] consumed = new bool[3];
             public int blockedMask;
             public readonly List<Light> lanternLights = new List<Light>();
@@ -145,24 +175,39 @@ namespace Reins
                 }
             }
 
-            UpdateLanternLights();
+            UpdateDistanceCulling();
         }
 
         /// <summary>
-        /// Switches the road lanterns on only around the carriage. Every lantern keeps its own emissive
-        /// body, so the distant ones still read as lit while their real lights stay switched off.
+        /// Keeps only what is near the carriage alive. The fog hides anything past it, so the foliage of
+        /// distant tiles is switched off as one object per tile, and the road lanterns only keep their
+        /// real lights switched on while they are close enough to matter. The rear forest is parked once
+        /// the carriage has left it behind.
         /// </summary>
-        private void UpdateLanternLights()
+        private void UpdateDistanceCulling()
         {
             for (var i = 0; i < _tiles.Length; i++)
             {
                 Tile tile = _tiles[i];
-                if (!tile.IsBuilt || tile.lanternLights.Count == 0)
+                if (!tile.IsBuilt)
                 {
                     continue;
                 }
 
-                bool lit = Mathf.Abs(tile.chunkIndex - _cartChunkIndex) <= lanternLitChunkSpan;
+                int distanceInChunks = Mathf.Abs(tile.chunkIndex - _cartChunkIndex);
+                bool nearCart = distanceInChunks <= treeBatchChunkSpan;
+
+                if (tile.treeBatch != null && tile.treeBatch.gameObject.activeSelf != nearCart)
+                {
+                    tile.treeBatch.gameObject.SetActive(nearCart);
+                }
+
+                if (tile.lanternLights.Count == 0)
+                {
+                    continue;
+                }
+
+                bool lit = distanceInChunks <= lanternLitChunkSpan;
                 for (var l = 0; l < tile.lanternLights.Count; l++)
                 {
                     Light light = tile.lanternLights[l];
@@ -170,6 +215,29 @@ namespace Reins
                     {
                         light.enabled = lit;
                     }
+                }
+            }
+
+            if (_rearForest != null)
+            {
+                // One check for the whole rear wall: it stays parked once the ride has moved on.
+                bool behindTheStart = _cartChunkIndex <= treeBatchChunkSpan;
+                if (_rearForest.activeSelf != behindTheStart)
+                {
+                    _rearForest.SetActive(behindTheStart);
+                }
+            }
+
+            if (_kingdom != null)
+            {
+                // The kingdom is a lot of geometry parked at the very end of the road. Fog is not culling,
+                // so without this it is drawn for the whole ride while being invisible; it is switched on
+                // only once it is close enough to emerge through the mist.
+                bool nearEnd = LevelDistance <= 0f ||
+                               TraveledDistance >= LevelDistance - kingdomRevealDistance;
+                if (_kingdom.activeSelf != nearEnd)
+                {
+                    _kingdom.SetActive(nearEnd);
                 }
             }
         }
@@ -212,7 +280,15 @@ namespace Reins
             DestroyMaterial(_leafMaterial);
             DestroyMaterial(_stoneMaterial);
             if (_dirtTexture != null) Destroy(_dirtTexture);
+            if (_barkTexture != null) Destroy(_barkTexture);
+            if (_leafTexture != null) Destroy(_leafTexture);
+            if (_owlEyesSprite != null) Destroy(_owlEyesSprite);
+            if (_owlEyesTexture != null) Destroy(_owlEyesTexture);
             _dirtTexture = null;
+            _barkTexture = null;
+            _leafTexture = null;
+            _owlEyesSprite = null;
+            _owlEyesTexture = null;
             _roadMaterial = null;
             _vergeMaterial = null;
             _dividerMaterial = null;
@@ -252,6 +328,15 @@ namespace Reins
             _trunkMaterial = CreateMaterial(new Color(0.24f, 0.14f, 0.07f));
             _leafMaterial = CreateMaterial(new Color(0.07f, 0.19f, 0.09f));
             _stoneMaterial = CreateMaterial(new Color(0.34f, 0.32f, 0.29f));
+            _barkTexture = CreateBarkTexture();
+            _leafTexture = CreateLeafTexture();
+            _trunkMaterial.mainTexture = _barkTexture;
+            _leafMaterial.mainTexture = _leafTexture;
+            _owlEyesTexture = CreateOwlEyesTexture();
+            _owlEyesSprite = Sprite.Create(
+                _owlEyesTexture, new Rect(0f, 0f, _owlEyesTexture.width, _owlEyesTexture.height),
+                new Vector2(0.5f, 0.5f), 128f);
+            _owlEyesSprite.name = "GeneratedOwlEyes";
 
             _tiles = new Tile[poolSize];
             for (var i = 0; i < poolSize; i++)
@@ -283,7 +368,7 @@ namespace Reins
         {
             _rearForest = new GameObject("RearForest");
             _rearForest.transform.SetParent(transform, false);
-            for (int row = 0; row < forestRows; row++)
+            for (int row = 0; row < TotalForestRows; row++)
             {
                 // One more column than a road tile so the wall behind the carriage has no seam.
                 int columns = Mathf.Max(4, treesPerRow + 1);
@@ -295,7 +380,7 @@ namespace Reins
                         var tree = new GameObject("RearTree_" + side + "_" + row + "_" + column).transform;
                         tree.SetParent(_rearForest.transform, false);
                         tree.localPosition = new Vector3(
-                            side * (roadWidth * 0.5f + 2f + row * forestRowSpacing + seed % 3),
+                            side * (roadWidth * 0.5f + 2f + GetForestRowOffset(row) + seed % 3),
                             0f, 4f + column * 7.5f + row * 2f);
                         if (TryCreateTreeVisual(tree, seed)) continue;
                         // Only reached when no tree model is assigned: the block tree below is the
@@ -310,6 +395,8 @@ namespace Reins
                     }
                 }
             }
+
+            DisableSceneryShadows(_rearForest.transform);
         }
 
         private void BuildKingdom()
@@ -380,7 +467,14 @@ namespace Reins
                 tile.branches[(branch + 1) / 2] = tileRoot.Find("Branch_" + branch);
             }
 
-            for (var row = 0; row < forestRows; row++)
+            // Every tree of the tile lives under one object. Switching a whole tile's worth of foliage
+            // on and off is then a single SetActive instead of walking hundreds of renderers, which is
+            // what makes it affordable to keep only the tiles near the carriage populated.
+            var treeBatch = new GameObject("TreeBatch").transform;
+            treeBatch.SetParent(tileRoot, false);
+            tile.treeBatch = treeBatch;
+
+            for (var row = 0; row < TotalForestRows; row++)
             {
                 for (var tree = 0; tree < treesPerRow; tree++)
                 {
@@ -389,11 +483,11 @@ namespace Reins
                         int seed = Mathf.Abs(index * 53 + row * 17 + tree * 11 + side * 3);
                         float stagger = ((seed % 7) - 3) * 0.26f;
                         float z = -(tree + 0.5f) * tileLength / treesPerRow + stagger;
-                        float forkClearance = forkDivergence;
+                        float forkClearance = _path.HasForks ? forkDivergence : 0f;
                         float x = side * (roadWidth * 0.5f + 2f + forkClearance +
-                                          row * forestRowSpacing + (seed % 4) * 0.55f);
+                                          GetForestRowOffset(row) + (seed % 4) * 0.55f);
                         var treeRoot = new GameObject("Tree_" + side + "_" + row + "_" + tree).transform;
-                        treeRoot.SetParent(tileRoot, false);
+                        treeRoot.SetParent(treeBatch, false);
                         treeRoot.localPosition = new Vector3(x, 0f, z);
 
                         if (TryCreateTreeVisual(treeRoot, seed)) continue;
@@ -408,8 +502,30 @@ namespace Reins
                 }
             }
 
+            BuildOwlEyes(treeBatch, index);
             BuildPostLanterns(tileRoot, tile);
             BuildStones(tile, index);
+            BuildDecorativeEdgeStones(tileRoot, index);
+            // Last, so it covers the road, its markings, the posts and the foliage in one pass.
+            DisableSceneryShadows(tileRoot);
+        }
+
+        /// <summary>
+        /// Turns off shadow casting for a whole group of scenery in one pass. At night the only shadows
+        /// that read are the carriage's own, and every extra caster costs a shadow pass over hundreds of
+        /// objects, so the road, its markings, the posts and the foliage all opt out.
+        /// </summary>
+        private void DisableSceneryShadows(Transform group)
+        {
+            if (castSceneryShadows || group == null)
+            {
+                return;
+            }
+
+            foreach (Renderer renderer in group.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+            }
         }
 
         /// <summary>
@@ -421,6 +537,12 @@ namespace Reins
         {
             tile.lanternLights.Clear();
             if (postLanternPrefab == null)
+            {
+                return;
+            }
+
+            int chunksBetweenPosts = Mathf.Max(1, Mathf.RoundToInt(postLanternSpacing / tileLength));
+            if (tile.chunkIndex % chunksBetweenPosts != 0)
             {
                 return;
             }
@@ -440,18 +562,25 @@ namespace Reins
                     GameObject instance = Instantiate(postLanternPrefab, holder, false);
                     instance.name = "PostLantern_Model";
                     FitUniformHeight(instance, postLanternHeight);
+                    // The head is on the model's +Z, so the post is turned a quarter turn to aim it at
+                    // the middle of the road instead of down the road.
+                    instance.transform.localRotation = Quaternion.Euler(0f, side < 0 ? 90f : -90f, 0f);
 
-                    tile.lanternLights.Add(CreatePostLanternLight(holder));
+                    tile.lanternLights.Add(CreatePostLanternLight(holder, side));
                 }
             }
         }
 
-        private Light CreatePostLanternLight(Transform holder)
+        private Light CreatePostLanternLight(Transform holder, int side)
         {
+            // Measured off the source model: the lantern head sits at 78% of the post's height and its
+            // centre is 41% of that height out to one side, which after the quarter turn points inward.
+            float headHeight = postLanternHeight * 0.78f;
+            float headReach = postLanternHeight * 0.41f;
+
             var lightObject = new GameObject("LanternLight");
             lightObject.transform.SetParent(holder, false);
-            // The light sits inside the lantern head rather than at the foot of the post.
-            lightObject.transform.localPosition = new Vector3(0f, postLanternHeight * 0.86f, 0f);
+            lightObject.transform.localPosition = new Vector3(-side * headReach, headHeight, 0f);
             Light light = lightObject.AddComponent<Light>();
             light.type = LightType.Point;
             light.color = postLanternColor;
@@ -479,7 +608,85 @@ namespace Reins
             instance.name = "TreeModel";
             float height = treeHeight * (0.85f + (Mathf.Abs(variationSeed) % 5) * 0.06f);
             FitUniformHeight(instance, height);
+            ApplyTreeMaterials(instance);
             return true;
+        }
+
+        private void ApplyTreeMaterials(GameObject tree)
+        {
+            foreach (Renderer renderer in tree.GetComponentsInChildren<Renderer>(true))
+            {
+                Material[] materials = renderer.sharedMaterials;
+                bool changed = false;
+                for (int index = 0; index < materials.Length; index++)
+                {
+                    if (materials[index] == null)
+                    {
+                        continue;
+                    }
+
+                    string name = materials[index].name;
+                    if (name.IndexOf("Bark", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        materials[index] = _trunkMaterial;
+                        changed = true;
+                    }
+                    else if (name.IndexOf("Leaf", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        materials[index] = _leafMaterial;
+                        changed = true;
+                    }
+                }
+
+                if (changed)
+                {
+                    renderer.sharedMaterials = materials;
+                }
+            }
+        }
+
+        private void BuildDecorativeEdgeStones(Transform tileRoot, int index)
+        {
+            if (!buildDecorativeEdgeStones)
+            {
+                return;
+            }
+
+            int count = Mathf.Max(1, edgeStonePairsPerTile);
+            for (int stoneIndex = 0; stoneIndex < count; stoneIndex++)
+            {
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    int seed = Mathf.Abs(index * 31 + stoneIndex * 7 + side * 3);
+                    GameObject stone = rockPrefab != null
+                        ? Instantiate(rockPrefab, tileRoot, false)
+                        : GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    stone.name = "DecorativeEdgeStone_" + side + "_" + stoneIndex;
+                    stone.transform.SetParent(tileRoot, false);
+                    if (rockPrefab != null)
+                    {
+                        FitHorizontalFootprint(stone, 0.55f, 0.50f);
+                    }
+                    else
+                    {
+                        stone.transform.localScale = new Vector3(0.42f, 0.22f, 0.38f);
+                        Renderer renderer = stone.GetComponent<Renderer>();
+                        if (renderer != null)
+                        {
+                            renderer.sharedMaterial = _stoneMaterial;
+                        }
+                    }
+
+                    float z = -(stoneIndex + 0.5f) * tileLength / count + ((seed % 7) - 3) * 0.24f;
+                    float x = side * (roadWidth * 0.5f + 0.85f + (seed % 3) * 0.12f);
+                    stone.transform.localPosition = new Vector3(x, 0.12f, z);
+                    stone.transform.localRotation = Quaternion.Euler(0f, seed % 360, 0f);
+                    foreach (Collider collider in stone.GetComponentsInChildren<Collider>(true))
+                    {
+                        Destroy(collider);
+                    }
+                }
+            }
         }
 
         private void BuildStones(Tile tile, int index)
@@ -626,7 +833,7 @@ namespace Reins
                 ? Mathf.Clamp(totalTiles + 1, poolSize + 1, MaximumChunks)
                 : MaximumChunks;
             return new RoadPathModel(chunks, tileLength, curvatureScale, turnRadius,
-                heightAmplitude, heightWavelength, forkDivergence);
+                heightAmplitude, heightWavelength, buildRoadForks ? forkDivergence : 0f);
         }
 
         public bool TryStopOnRock(Vector3 previousPosition, Vector3 currentPosition)
@@ -760,6 +967,113 @@ namespace Reins
             return material;
         }
 
+        private Texture2D CreateBarkTexture()
+        {
+            const int size = 128;
+            var texture = new Texture2D(size, size, TextureFormat.RGB24, false)
+            {
+                name = "GeneratedTreeBark",
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear
+            };
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float u = (x + 0.5f) / size;
+                    float v = (y + 0.5f) / size;
+                    float groove = 0.84f + 0.12f * Mathf.Sin((u + 0.012f * Mathf.Sin(v * Mathf.PI * 6f)) * Mathf.PI * 42f);
+                    float noise = TileablePerlin(u, v, 8f) * 0.12f;
+                    float shade = Mathf.Clamp01(groove + noise - 0.04f);
+                    pixels[y * size + x] = new Color(shade, shade, shade, 1f);
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            return texture;
+        }
+
+        private Texture2D CreateLeafTexture()
+        {
+            const int size = 128;
+            var texture = new Texture2D(size, size, TextureFormat.RGB24, false)
+            {
+                name = "GeneratedTreeLeaves",
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear
+            };
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float u = (x + 0.5f) / size;
+                    float v = (y + 0.5f) / size;
+                    float broad = TileablePerlin(u, v, 6f);
+                    float fine = TileablePerlin(u, v, 20f);
+                    float shade = Mathf.Lerp(0.58f, 1f, broad * 0.72f + fine * 0.28f);
+                    pixels[y * size + x] = new Color(shade, shade, shade, 1f);
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            return texture;
+        }
+
+        private static Texture2D CreateOwlEyesTexture()
+        {
+            const int width = 48;
+            const int height = 24;
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+            {
+                name = "GeneratedOwlEyesTexture",
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            var pixels = new Color[width * height];
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float leftDistance = Mathf.Sqrt(Mathf.Pow((x - 14f) / 8f, 2f) + Mathf.Pow((y - 12f) / 9f, 2f));
+                    float rightDistance = Mathf.Sqrt(Mathf.Pow((x - 34f) / 8f, 2f) + Mathf.Pow((y - 12f) / 9f, 2f));
+                    float distance = Mathf.Min(leftDistance, rightDistance);
+                    if (distance <= 1f)
+                    {
+                        pixels[y * width + x] = distance <= 0.34f
+                            ? new Color(0.035f, 0.020f, 0.012f, 1f)
+                            : new Color(1f, 0.70f, 0.26f, 1f);
+                    }
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            return texture;
+        }
+
+        private void BuildOwlEyes(Transform treeBatch, int chunkIndex)
+        {
+            if (_owlEyesSprite == null || chunkIndex % 2 != 0)
+            {
+                return;
+            }
+
+            int side = chunkIndex % 4 == 0 ? -1 : 1;
+            var eyes = new GameObject("OwlEyes");
+            eyes.transform.SetParent(treeBatch, false);
+            eyes.transform.localPosition = new Vector3(
+                side * (roadWidth * 0.5f + forestRowSpacing * 0.7f), 3.8f, -tileLength * 0.5f);
+            eyes.transform.localRotation = Quaternion.Euler(0f, side < 0 ? 90f : -90f, 0f);
+            SpriteRenderer renderer = eyes.AddComponent<SpriteRenderer>();
+            renderer.sprite = _owlEyesSprite;
+            renderer.color = new Color(1f, 0.80f, 0.45f, 0.95f);
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+        }
+
         private Texture2D CreateDirtTexture()
         {
             const int size = 128;
@@ -792,7 +1106,8 @@ namespace Reins
                     float localX = ((x + 0.5f) / size - 0.5f) * roadWidth;
                     float leftDividerDistance = Mathf.Abs(localX + laneWidth * 0.5f);
                     float rightDividerDistance = Mathf.Abs(localX - laneWidth * 0.5f);
-                    if (Mathf.Min(leftDividerDistance, rightDividerDistance) <= laneMarkingWidth * 0.5f)
+                    if (buildLaneDividers &&
+                        Mathf.Min(leftDividerDistance, rightDividerDistance) <= laneMarkingWidth * 0.5f)
                     {
                         dirt = Color.Lerp(dirt, laneMarkingColor, laneMarkingStrength);
                     }
@@ -849,11 +1164,14 @@ namespace Reins
                 Gizmos.matrix = Matrix4x4.TRS(center, rotation, Vector3.one);
                 Gizmos.DrawCube(Vector3.zero, new Vector3(width, 0.08f, tileLength));
 
-                Gizmos.color = new Color(0.92f, 0.82f, 0.50f, 1f);
-                for (var divider = -1; divider <= 1; divider += 2)
+                if (buildLaneDividers)
                 {
-                    Gizmos.DrawCube(new Vector3(divider * laneWidth * 0.5f, 0.02f, 0f),
-                        new Vector3(0.09f, 0.025f, tileLength - 0.2f));
+                    Gizmos.color = new Color(0.92f, 0.82f, 0.50f, 1f);
+                    for (var divider = -1; divider <= 1; divider += 2)
+                    {
+                        Gizmos.DrawCube(new Vector3(divider * laneWidth * 0.5f, 0.02f, 0f),
+                            new Vector3(laneMarkingWidth, 0.025f, tileLength - 0.2f));
+                    }
                 }
 
                 Gizmos.color = new Color(0.16f, 0.38f, 0.13f, 0.8f);

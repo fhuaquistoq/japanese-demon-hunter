@@ -27,6 +27,8 @@ namespace JapaneseDemonHunter.Monsters
         [Min(0f)] public float minimumFlyingHeight;
         [Min(0f)] public float maximumFlyingHeight;
         [Min(0f)] public float attachmentLoad;
+        [Tooltip("Speed multiplier for the few members of the horde that are fast enough to reach the cart.")]
+        [Min(0.1f)] public float speedMultiplier = 1f;
 
         [Header("Comportamiento opcional")]
         [Tooltip("When enabled the spawner overrides the prefab's own target strategy, so the same monster prefab can hunt the player in one scene and candles in another.")]
@@ -53,6 +55,13 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField, Min(0.1f)] private float spawnInterval = 11f;
         [Tooltip("Seconds before the first spawn when the scene must start empty.")]
         [SerializeField, Min(0f)] private float initialSpawnDelay = 35f;
+        [Header("Horda permanente")]
+        [Tooltip("Rear monsters that must always be alive behind the cart, so the ride is never empty.")]
+        [SerializeField, Min(0)] private int minimumHordeSize;
+        [Tooltip("Only this many of them chase; the rest keep a slower pace and never catch the cart.")]
+        [SerializeField, Range(0f, 1f)] private float fastHordeFraction = 0.34f;
+        [SerializeField, Min(0.1f)] private float fastHordeSpeedMultiplier = 1.5f;
+        [SerializeField, Min(0.1f)] private float hordeRefillInterval = 0.5f;
         [SerializeField, Min(1)] private int maximumActiveMonsters = 8;
         [SerializeField, Min(1)] private int maximumPlacementAttempts = 12;
 
@@ -72,10 +81,15 @@ namespace JapaneseDemonHunter.Monsters
         [SerializeField, Min(0.1f)] private float frontLaneSpacing = 2.8f;
 
         private readonly HashSet<MonsterBase> activeMonsters = new HashSet<MonsterBase>();
+        private readonly List<MonsterBase> rearMonsters = new List<MonsterBase>();
+        private RearHordeModel hordeModel;
+        private float nextHordeRefillTime;
         private float nextSpawnTime;
         private ICartFirstGallopSource firstGallopSource;
         private bool waitingForFirstGallop;
+        private int reservedFaceThreatSlots;
 
+        public Transform CartTransform => cartTransform;
         public int ActiveMonsterCount => activeMonsters.Count;
         public int MaximumActiveMonsters => maximumActiveMonsters;
         public bool SpawnsOneOfEachOnStart => spawnOneOfEachOnStart;
@@ -88,6 +102,18 @@ namespace JapaneseDemonHunter.Monsters
                 component is ICartFirstGallopSource);
         public int AttachedMonsterCount => activeMonsters.Count(monster =>
             monster != null && monster.Attachment != null && monster.Attachment.IsAttached);
+        /// <summary>Rear monsters kept alive so a horde is always visible behind the cart.</summary>
+        public int RearMonsterCount
+        {
+            get
+            {
+                rearMonsters.RemoveAll(monster => monster == null || !monster.gameObject.activeInHierarchy);
+                return rearMonsters.Count;
+            }
+        }
+        public int MinimumHordeSize => minimumHordeSize;
+        public RearHordeModel HordeModel => hordeModel ??=
+            new RearHordeModel(fastHordeFraction, fastHordeSpeedMultiplier);
         public IReadOnlyCollection<MonsterBase> ActiveMonsters => activeMonsters;
         public IReadOnlyList<MonsterSpawnEntry> SpawnEntries => spawnEntries;
         public event Action<MonsterBase> MonsterSpawned;
@@ -146,16 +172,99 @@ namespace JapaneseDemonHunter.Monsters
         {
             RemoveStaleReferences();
             RetireDistantMonsters();
+            MaintainHorde();
             if (waitingForFirstGallop || Time.time < nextSpawnTime)
             {
                 return;
             }
 
             nextSpawnTime = Time.time + spawnInterval;
-            if (activeMonsters.Count < maximumActiveMonsters)
+            if (activeMonsters.Count < maximumActiveMonsters - reservedFaceThreatSlots)
             {
                 TrySpawn();
             }
+        }
+
+        /// <summary>
+        /// Keeps the configured number of rear monsters alive and promotes only a few of them to the
+        /// fast pace. The horde fills immediately once the ride starts, which is what makes the
+        /// monsters always visible behind the cart instead of trickling in one at a time.
+        /// </summary>
+        private void MaintainHorde()
+        {
+            if (minimumHordeSize <= 0 || !IsConfigured)
+            {
+                return;
+            }
+
+            int rearCount = RearMonsterCount;
+            if (Time.time < nextHordeRefillTime)
+            {
+                ApplyHordeSpeeds();
+                return;
+            }
+
+            int missing = HordeModel.MissingCount(rearCount, minimumHordeSize, activeMonsters.Count,
+                maximumActiveMonsters);
+            if (missing <= 0)
+            {
+                ApplyHordeSpeeds();
+                return;
+            }
+
+            MonsterSpawnEntry rearEntry = SelectRearEntry();
+            if (rearEntry == null)
+            {
+                return;
+            }
+
+            for (int spawned = 0; spawned < missing; spawned++)
+            {
+                if (!TrySpawn(rearEntry))
+                {
+                    break;
+                }
+            }
+
+            nextHordeRefillTime = Time.time + hordeRefillInterval;
+            ApplyHordeSpeeds();
+        }
+
+        private void ApplyHordeSpeeds()
+        {
+            int fastRunners = HordeModel.FastRunnerCount(rearMonsters.Count);
+            for (int index = rearMonsters.Count - 1; index >= 0; index--)
+            {
+                MonsterBase monster = rearMonsters[index];
+                if (monster == null || !monster.gameObject.activeInHierarchy)
+                {
+                    rearMonsters.RemoveAt(index);
+                    continue;
+                }
+
+                float multiplier = HordeModel.SpeedMultiplierFor(index, fastRunners);
+                monster.SpeedMultiplier = multiplier;
+            }
+        }
+
+        private MonsterSpawnEntry SelectRearEntry()
+        {
+            MonsterSpawnEntry candidate = null;
+            foreach (MonsterSpawnEntry entry in spawnEntries)
+            {
+                if (entry == null || entry.prefab == null ||
+                    entry.spawnDirection == MonsterSpawnDirection.FrontLane)
+                {
+                    continue;
+                }
+
+                if (candidate == null || entry.weight > candidate.weight)
+                {
+                    candidate = entry;
+                }
+            }
+
+            return candidate;
         }
 
         public bool TrySpawn(MonsterSpawnEntry requestedEntry = null)
@@ -173,18 +282,67 @@ namespace JapaneseDemonHunter.Monsters
                 return false;
             }
 
+            return SpawnAtPosition(entry, position, frontLaneIndex) != null;
+        }
+
+        public bool TrySpawnFaceThreatRound(int count)
+        {
+            if (!IsConfigured || count < 1 || count > 3 ||
+                activeMonsters.Count + count > maximumActiveMonsters)
+            {
+                return false;
+            }
+
+            MonsterSpawnEntry entry = spawnEntries.FirstOrDefault(candidate =>
+                candidate != null && candidate.prefab != null && candidate.weight > 0f &&
+                candidate.isFaceThreat && candidate.spawnDirection == MonsterSpawnDirection.FrontLane);
+            if (entry == null || entry.prefab.GetComponent<MonsterBase>() == null)
+            {
+                return false;
+            }
+
+            Vector3[] positions = new Vector3[count];
+            int[] lanes = new int[count];
+            for (int index = 0; index < count; index++)
+            {
+                int lane = count == 1 ? 0 : count == 2 ? (index == 0 ? -1 : 1) : index - 1;
+                if (!TryFindFrontLanePosition(entry, out positions[index], out lanes[index], lane))
+                {
+                    return false;
+                }
+            }
+
+            for (int index = 0; index < count; index++)
+            {
+                if (SpawnAtPosition(entry, positions[index], lanes[index]) == null)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private MonsterBase SpawnAtPosition(MonsterSpawnEntry entry, Vector3 position, int frontLaneIndex)
+        {
             GameObject instance = Instantiate(entry.prefab, position, Quaternion.identity, transform);
             MonsterBase monster = instance.GetComponent<MonsterBase>();
             if (monster == null)
             {
                 Destroy(instance);
                 Debug.LogError($"Spawn prefab {entry.prefab.name} has no MonsterBase component.", this);
-                return false;
+                return null;
             }
 
             monster.name = entry.prefab.name;
             monster.BecameInactive += HandleMonsterInactive;
             activeMonsters.Add(monster);
+            if (entry.spawnDirection != MonsterSpawnDirection.FrontLane)
+            {
+                rearMonsters.Add(monster);
+                monster.SpeedMultiplier = HordeModel.SpeedMultiplierFor(
+                    rearMonsters.Count - 1, HordeModel.FastRunnerCount(rearMonsters.Count));
+            }
             if (entry.overrideTargetStrategy)
             {
                 MonsterTargetSelector selector = monster.GetComponent<MonsterTargetSelector>();
@@ -213,7 +371,7 @@ namespace JapaneseDemonHunter.Monsters
                 hunterTarget = hunterTarget
             });
             MonsterSpawned?.Invoke(monster);
-            return true;
+            return monster;
         }
 
         public bool TryFindSpawnPosition(MonsterMovementType movementType, out Vector3 position)
@@ -272,14 +430,15 @@ namespace JapaneseDemonHunter.Monsters
             return false;
         }
 
-        private bool TryFindFrontLanePosition(MonsterSpawnEntry entry, out Vector3 position, out int lane)
+        private bool TryFindFrontLanePosition(MonsterSpawnEntry entry, out Vector3 position, out int lane,
+            int? forcedLane = null)
         {
             position = default;
-            lane = UnityEngine.Random.Range(-1, 2);
-            Vector3 forward = Vector3.ProjectOnPlane(cartTransform.forward, Vector3.up).normalized;
+            lane = forcedLane.HasValue ? Mathf.Clamp(forcedLane.Value, -1, 1) : UnityEngine.Random.Range(-1, 2);
+            Vector3 forward = Vector3.ProjectOnPlane(-cartTransform.forward, Vector3.up).normalized;
             if (forward.sqrMagnitude < 0.001f)
             {
-                forward = Vector3.forward;
+                forward = Vector3.back;
             }
 
             Vector3 candidate = cartTransform.position + forward * Mathf.Max(0f, entry.frontLaneForwardRadius) +
@@ -428,9 +587,29 @@ namespace JapaneseDemonHunter.Monsters
             firstGallopSource = configuredSource as ICartFirstGallopSource;
         }
 
+        /// <summary>Configures the permanent rear horde: how many, and how many of them run.</summary>
+        public void ConfigureHorde(
+            int configuredMinimumSize,
+            float configuredFastFraction,
+            float configuredFastSpeedMultiplier,
+            float configuredRefillInterval = 0.5f)
+        {
+            minimumHordeSize = Mathf.Max(0, configuredMinimumSize);
+            fastHordeFraction = Mathf.Clamp01(configuredFastFraction);
+            fastHordeSpeedMultiplier = Mathf.Max(0.1f, configuredFastSpeedMultiplier);
+            hordeRefillInterval = Mathf.Max(0.1f, configuredRefillInterval);
+            hordeModel = new RearHordeModel(fastHordeFraction, fastHordeSpeedMultiplier);
+            maximumActiveMonsters = Mathf.Max(maximumActiveMonsters, minimumHordeSize);
+        }
+
         public void ConfigureFirstGallopWait(bool configuredWait)
         {
             waitForFirstGallop = configuredWait;
+        }
+
+        public void ReserveFaceThreatSlots(int slots)
+        {
+            reservedFaceThreatSlots = Mathf.Clamp(slots, 0, maximumActiveMonsters);
         }
 
         private void ResolveFirstGallopSource()
@@ -471,7 +650,8 @@ namespace JapaneseDemonHunter.Monsters
         private MonsterSpawnEntry SelectWeightedEntry()
         {
             float totalWeight = spawnEntries
-                .Where(entry => entry != null && entry.prefab != null)
+                .Where(entry => entry != null && entry.prefab != null &&
+                                (reservedFaceThreatSlots == 0 || !entry.isFaceThreat))
                 .Sum(entry => Mathf.Max(0f, entry.weight));
             if (totalWeight <= 0f)
             {
@@ -481,7 +661,8 @@ namespace JapaneseDemonHunter.Monsters
             float selection = UnityEngine.Random.value * totalWeight;
             foreach (MonsterSpawnEntry entry in spawnEntries)
             {
-                if (entry == null || entry.prefab == null)
+                if (entry == null || entry.prefab == null ||
+                    (reservedFaceThreatSlots > 0 && entry.isFaceThreat))
                 {
                     continue;
                 }
@@ -493,7 +674,8 @@ namespace JapaneseDemonHunter.Monsters
                 }
             }
 
-            return spawnEntries.LastOrDefault(entry => entry != null && entry.prefab != null);
+            return spawnEntries.LastOrDefault(entry => entry != null && entry.prefab != null &&
+                                                      (reservedFaceThreatSlots == 0 || !entry.isFaceThreat));
         }
 
         private bool IsCandidateClear(Vector3 candidate, MonsterMovementType movementType)
@@ -545,12 +727,14 @@ namespace JapaneseDemonHunter.Monsters
 
             monster.BecameInactive -= HandleMonsterInactive;
             activeMonsters.Remove(monster);
+            rearMonsters.Remove(monster);
             Destroy(monster.gameObject);
         }
 
         private void RemoveStaleReferences()
         {
             activeMonsters.RemoveWhere(monster => monster == null || !monster.gameObject.activeInHierarchy);
+            rearMonsters.RemoveAll(monster => monster == null || !monster.gameObject.activeInHierarchy);
         }
 
         private void RetireDistantMonsters()

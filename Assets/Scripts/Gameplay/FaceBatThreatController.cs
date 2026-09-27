@@ -8,7 +8,6 @@ using UnityEngine;
 
 namespace JapaneseDemonHunter.Gameplay
 {
-    /// <summary>Stages one front-lane bat in a small near-field silhouette and lets tracked hand waves clear it.</summary>
     [DisallowMultipleComponent]
     public sealed class FaceBatThreatController : MonoBehaviour
     {
@@ -21,60 +20,109 @@ namespace JapaneseDemonHunter.Gameplay
         [SerializeField, Min(0.05f)] private float clearProximity = 0.65f;
         [SerializeField, Min(0.05f)] private float minimumWaveSpeed = 0.8f;
         [SerializeField, Min(0.5f)] private float maximumDuration = 4f;
+        [SerializeField, Range(1, 3)] private int batsPerRound = 3;
+        [SerializeField, Min(0f)] private float betweenRounds = 5f;
+        [SerializeField, Min(0.05f)] private float crouchDrop = 0.3f;
+        [SerializeField, Min(0.05f)] private float crouchDodgeHold = 0.4f;
+        [SerializeField, Min(0.1f)] private float lowFlightDelay = 2f;
 
         private readonly List<IHand> hands = new List<IHand>(2);
-        private MonsterBase activeThreat;
-        private Renderer[] threatRenderers;
+        private readonly List<MonsterBase> threats = new List<MonsterBase>(3);
         private FaceBatThreatModel model;
-        private Vector3 stagingPosition;
-        private bool isStaged;
+        private FaceBatCrouchModel crouch;
+        private ICartInputBlocker inputBlocker;
+        private bool roundClockStarted;
+        private bool waveTargetsLow;
+        private float nextRoundTime;
 
-        public MonsterBase ActiveThreat => activeThreat;
+        public MonsterBase ActiveThreat => threats.Count > 0 ? threats[0] : null;
+        public int ActiveThreatCount => threats.Count;
+        public bool IsRoundStaged => model != null;
+        public bool IsFlyingLow => waveTargetsLow;
         public Transform EyeAnchor => eyeAnchor;
 
         private void OnEnable()
         {
-            if (spawner != null) spawner.MonsterSpawned += HandleMonsterSpawned;
+            if (spawner == null) return;
+            spawner.MonsterSpawned += HandleMonsterSpawned;
+            spawner.ReserveFaceThreatSlots(batsPerRound);
         }
 
         private void Start()
         {
             DiscoverHands();
+            crouch = new FaceBatCrouchModel(crouchDrop, crouchDodgeHold, lowFlightDelay);
+            FindInputBlocker();
         }
 
         private void OnDisable()
         {
-            if (spawner != null) spawner.MonsterSpawned -= HandleMonsterSpawned;
-            ClearThreat();
+            if (spawner != null)
+            {
+                spawner.MonsterSpawned -= HandleMonsterSpawned;
+                spawner.ReserveFaceThreatSlots(0);
+            }
+            ClearThreats(false);
         }
 
         private void LateUpdate()
         {
-            if (activeThreat == null) return;
-            if (eyeAnchor == null || !activeThreat.gameObject.activeInHierarchy)
+            if (spawner == null || eyeAnchor == null)
             {
-                ClearThreat();
+                if (threats.Count > 0) ClearThreats(false);
                 return;
             }
 
-            if (!isStaged)
+            float relativeEyeHeight = eyeAnchor.position.y -
+                (spawner.CartTransform != null ? spawner.CartTransform.position.y : 0f);
+            crouch.Step(relativeEyeHeight, Time.deltaTime);
+            if (threats.Count == 0)
             {
-                activeThreat.TickFaceThreatApproach(stagingPosition, Time.deltaTime);
-                if (!FaceBatThreatModel.IsWithinStandOff(activeThreat.transform.position, stagingPosition, arrivalDistance))
+                TryStartRound();
+                return;
+            }
+
+            for (int index = 0; index < threats.Count; index++)
+            {
+                if (threats[index] == null || !threats[index].gameObject.activeInHierarchy)
                 {
+                    ClearThreats(true);
                     return;
                 }
+            }
 
-                StageThreat();
+            if (model == null && crouch.ShouldFlyLow) waveTargetsLow = true;
+            Vector3 eyePosition = eyeAnchor.position;
+            if (!waveTargetsLow && spawner.CartTransform != null)
+            {
+                eyePosition.y = spawner.CartTransform.position.y + crouch.StandingHeight;
+            }
+
+            foreach (MonsterBase threat in threats)
+            {
+                if (threat.IsStaged) continue;
+                Vector3 target = FaceBatThreatModel.GetStagingPosition(eyePosition,
+                    eyeAnchor.forward, eyeAnchor.right, threat.FrontLaneIndex, laneOffset, standOffDistance);
+                threat.TickFaceThreatApproach(target, Time.deltaTime);
+                if (FaceBatThreatModel.IsWithinStandOff(threat.transform.position, target, arrivalDistance))
+                {
+                    StageThreat(threat);
+                }
+            }
+
+            if (model == null) return;
+            if (!waveTargetsLow && crouch.CanDodge)
+            {
+                ClearThreats(true);
+                return;
             }
 
             Vector3 leftPalm = default;
             Vector3 rightPalm = default;
             bool leftValid = false;
             bool rightValid = false;
-            for (int index = 0; index < hands.Count; index++)
+            foreach (IHand hand in hands)
             {
-                IHand hand = hands[index];
                 Pose palm = default;
                 Pose middleTip = default;
                 bool valid = hand != null && hand.IsConnected && hand.IsTrackedDataValid &&
@@ -95,18 +143,52 @@ namespace JapaneseDemonHunter.Gameplay
                 }
             }
 
-            // Time advances exactly once per frame; either tracked hand may clear, while missing data cannot.
             FaceBatThreatResult result = model.Step(leftPalm, leftValid, rightPalm, rightValid, Time.deltaTime);
             if (result == FaceBatThreatResult.TimedOut) ApplyTimeoutPenaltyAndRetire();
-            else if (result == FaceBatThreatResult.HandCleared) ClearThreat();
+            else if (result == FaceBatThreatResult.HandCleared) ClearThreats(true);
         }
 
         public void Configure(MonsterSpawner configuredSpawner, Transform configuredEyeAnchor)
         {
-            if (spawner != null) spawner.MonsterSpawned -= HandleMonsterSpawned;
+            if (spawner != null)
+            {
+                spawner.MonsterSpawned -= HandleMonsterSpawned;
+                spawner.ReserveFaceThreatSlots(0);
+            }
+
             spawner = configuredSpawner;
             eyeAnchor = configuredEyeAnchor;
-            if (isActiveAndEnabled && spawner != null) spawner.MonsterSpawned += HandleMonsterSpawned;
+            inputBlocker = null;
+            if (isActiveAndEnabled && spawner != null)
+            {
+                spawner.MonsterSpawned += HandleMonsterSpawned;
+                spawner.ReserveFaceThreatSlots(batsPerRound);
+            }
+        }
+
+        private void TryStartRound()
+        {
+            if (spawner.IsWaitingForFirstGallop)
+            {
+                roundClockStarted = false;
+                return;
+            }
+
+            if (!roundClockStarted)
+            {
+                nextRoundTime = Time.time + spawner.InitialSpawnDelay;
+                roundClockStarted = true;
+            }
+
+            if (Time.time < nextRoundTime) return;
+            if (spawner.TrySpawnFaceThreatRound(batsPerRound))
+            {
+                waveTargetsLow = crouch.ShouldFlyLow;
+            }
+            else
+            {
+                nextRoundTime = Time.time + betweenRounds;
+            }
         }
 
         private void DiscoverHands()
@@ -125,24 +207,39 @@ namespace JapaneseDemonHunter.Gameplay
             }
         }
 
+        private void FindInputBlocker()
+        {
+            if (spawner == null || spawner.CartTransform == null) return;
+            foreach (MonoBehaviour behaviour in spawner.CartTransform.GetComponents<MonoBehaviour>())
+            {
+                if (behaviour is ICartInputBlocker blocker)
+                {
+                    inputBlocker = blocker;
+                    return;
+                }
+            }
+        }
+
         private void HandleMonsterSpawned(MonsterBase monster)
         {
-            if (activeThreat != null || monster == null || !monster.IsFaceThreatSpawn ||
+            if (monster == null || !monster.IsFaceThreatSpawn ||
                 monster.SpawnDirection != MonsterSpawnDirection.FrontLane || eyeAnchor == null)
             {
                 return;
             }
 
-            activeThreat = monster;
-            stagingPosition = FaceBatThreatModel.GetStagingPosition(
-                eyeAnchor.position, eyeAnchor.forward, eyeAnchor.right, monster.FrontLaneIndex,
-                laneOffset, standOffDistance);
-            threatRenderers = monster.GetComponentsInChildren<Renderer>(true);
-            monster.BeginFaceThreatApproach();
+            if (threats.Count >= batsPerRound)
+            {
+                monster.Retire();
+                return;
+            }
 
+            threats.Add(monster);
+            monster.BeginFaceThreatApproach();
+            Renderer[] renderers = monster.GetComponentsInChildren<Renderer>(true);
             Bounds bounds = default;
             bool hasBounds = false;
-            foreach (Renderer renderer in threatRenderers)
+            foreach (Renderer renderer in renderers)
             {
                 if (renderer == null || !renderer.enabled) continue;
                 if (!hasBounds) { bounds = renderer.bounds; hasBounds = true; }
@@ -155,19 +252,22 @@ namespace JapaneseDemonHunter.Gameplay
             }
         }
 
-        private void StageThreat()
+        private void StageThreat(MonsterBase monster)
         {
-            if (activeThreat == null || isStaged) return;
-            isStaged = true;
+            monster.StageForFaceThreat();
+            monster.transform.rotation = Quaternion.LookRotation(-eyeAnchor.forward, eyeAnchor.up);
+            foreach (Collider collider in monster.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
+            if (spawner.CartTransform != null) monster.transform.SetParent(spawner.CartTransform, true);
+            if (model != null) return;
+
             model = new FaceBatThreatModel(clearProximity, minimumWaveSpeed, maximumDuration);
-            activeThreat.StageForFaceThreat();
-            activeThreat.transform.rotation = Quaternion.LookRotation(-eyeAnchor.forward, eyeAnchor.up);
-            foreach (Collider collider in activeThreat.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
+            if (inputBlocker == null) FindInputBlocker();
+            inputBlocker?.SetInputBlocked(true);
         }
 
         private void ApplyTimeoutPenaltyAndRetire()
         {
-            Transform cart = activeThreat != null ? activeThreat.CartTransform : null;
+            Transform cart = ActiveThreat != null ? ActiveThreat.CartTransform : null;
             while (cart != null)
             {
                 foreach (MonoBehaviour component in cart.GetComponents<MonoBehaviour>())
@@ -175,25 +275,31 @@ namespace JapaneseDemonHunter.Gameplay
                     if (component is CarriageMotor motor)
                     {
                         motor.ApplyHitPenalty();
-                        ClearThreat();
+                        ClearThreats(true);
                         return;
                     }
                 }
                 cart = cart.parent;
             }
 
-            // No temporary hit-penalty integration is available; retire safely without changing load state.
-            ClearThreat();
+            ClearThreats(true);
         }
 
-        private void ClearThreat()
+        private void ClearThreats(bool scheduleNext)
         {
-            MonsterBase threat = activeThreat;
-            activeThreat = null;
+            if (inputBlocker is MonoBehaviour receiver && receiver != null)
+            {
+                inputBlocker.SetInputBlocked(false);
+            }
+
+            foreach (MonsterBase threat in threats)
+            {
+                if (threat != null) threat.Retire();
+            }
+            threats.Clear();
             model = null;
-            threatRenderers = null;
-            isStaged = false;
-            if (threat != null) threat.Retire();
+            waveTargetsLow = false;
+            if (scheduleNext) nextRoundTime = Time.time + betweenRounds;
         }
     }
 }

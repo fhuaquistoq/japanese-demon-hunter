@@ -34,6 +34,12 @@ namespace JapaneseDemonHunter.Monsters
 
         public MonsterState State { get; private set; } = MonsterState.Spawn;
         public bool IsDead => State == MonsterState.Dead;
+        /// <summary>Scales this monster's pace; 1 is the prefab's own speed.</summary>
+        public float SpeedMultiplier
+        {
+            get => movement != null ? movement.SpeedMultiplier : 1f;
+            set => movement?.SetSpeedMultiplier(value);
+        }
         public bool IsInitialized => initialized;
         public bool IsStaged => isStaged;
         public IMonsterTarget CurrentTarget => targetSelector != null ? targetSelector.CurrentTarget : null;
@@ -146,9 +152,14 @@ namespace JapaneseDemonHunter.Monsters
                 return;
             }
 
-            if (isStaged || isFaceThreatApproaching)
+            if (isStaged)
             {
                 movement.Stop();
+                return;
+            }
+
+            if (isFaceThreatApproaching)
+            {
                 return;
             }
 
@@ -236,11 +247,17 @@ namespace JapaneseDemonHunter.Monsters
             movement?.Stop();
         }
 
-        /// <summary>Moves toward a fixed, lane-selected stand-off point without running monster AI.</summary>
         public void TickFaceThreatApproach(Vector3 destination, float deltaTime)
         {
             if (!isFaceThreatApproaching || movement == null || deltaTime <= 0f) return;
-            movement.TickMoveTowards(destination, movement.ApproachSpeed, deltaTime);
+            if (movement is FlyingMonsterMovement flying)
+            {
+                flying.TickMoveTowardsFace(destination, movement.ApproachSpeed, deltaTime);
+            }
+            else
+            {
+                movement.TickMoveTowards(destination, movement.ApproachSpeed, deltaTime);
+            }
         }
 
         /// <summary>Pauses monster AI once it reaches its safe stand-off; retirement remains available.</summary>
