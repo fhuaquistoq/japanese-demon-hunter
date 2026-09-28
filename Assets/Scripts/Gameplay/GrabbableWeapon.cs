@@ -11,6 +11,7 @@ namespace JapaneseDemonHunter.Gameplay
     /// it while the hand is moving fast and it is thrown as a physical projectile that keeps dealing
     /// damage in flight and then falls to the road, left behind by the carriage.
     /// </summary>
+    [DefaultExecutionOrder(10000)]
     [DisallowMultipleComponent]
     public sealed class GrabbableWeapon : MonoBehaviour
     {

@@ -69,6 +69,9 @@ namespace Reins
 
         private const int RecycleBehindChunks = 2;
         private const int MaximumChunks = 4096;
+        // Canopy width as a fraction of the tree's height. A real forest tree is roughly a third as
+        // wide as it is tall; the stock meshes are much squarer than that.
+        private const float TreeWidthToHeight = 0.32f;
 
         private Tile[] _tiles;
         private RoadPathModel _path;
@@ -607,7 +610,7 @@ namespace Reins
             var instance = Instantiate(prefab, parent, false);
             instance.name = "TreeModel";
             float height = treeHeight * (0.85f + (Mathf.Abs(variationSeed) % 5) * 0.06f);
-            FitUniformHeight(instance, height);
+            FitTreeShape(instance, height, TreeWidthToHeight);
             ApplyTreeMaterials(instance);
             return true;
         }
@@ -872,6 +875,7 @@ namespace Reins
             return ObstacleSchedule.BlockedLaneMask(groupIndex);
         }
 
+        /// <summary>Uniformly scales a prop so its rendered height matches the requested size.</summary>
         private static void FitUniformHeight(GameObject instance, float targetHeight)
         {
             if (!TryGetRendererBounds(instance, out var bounds) || bounds.size.y <= 0.0001f)
@@ -880,6 +884,35 @@ namespace Reins
             }
 
             instance.transform.localScale *= targetHeight / bounds.size.y;
+        }
+
+        /// <summary>
+        /// Scales a tree to the requested height in one pass while also forcing its canopy to the
+        /// requested width-to-height ratio. Fitting the height and then the footprint as two separate
+        /// steps let each one read bounds that the other had already changed, so the trees kept the
+        /// squarish 4 m width of the source meshes and read as poles.
+        /// </summary>
+        private static void FitTreeShape(GameObject instance, float targetHeight, float widthToHeight)
+        {
+            if (!TryGetRendererBounds(instance, out var bounds) || bounds.size.y <= 0.0001f)
+            {
+                return;
+            }
+
+            float uniform = targetHeight / bounds.size.y;
+            var scale = instance.transform.localScale;
+            if (bounds.size.x > 0.0001f)
+            {
+                scale.x = targetHeight * widthToHeight / bounds.size.x;
+            }
+
+            if (bounds.size.z > 0.0001f)
+            {
+                scale.z = targetHeight * widthToHeight / bounds.size.z;
+            }
+
+            scale.y *= uniform;
+            instance.transform.localScale = scale;
         }
 
         private static void FitHorizontalFootprint(GameObject instance, float targetWidth, float targetDepth)

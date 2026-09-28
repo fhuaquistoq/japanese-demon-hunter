@@ -877,11 +877,11 @@ PlayerSettings:
   activeInputHandler: 1
   windowsGamepadBackendHint: 0
   enableDirectStorage: 0
-  cloudProjectId: a6566c46-41b3-4696-a649-36a397ec134e
+  cloudProjectId: aa054585-0fbe-4643-840e-0b2af54b3823
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
   projectName: japanese-demon-hunter
-  organizationId: rventurave
+  organizationId: fhuaquistoq
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}

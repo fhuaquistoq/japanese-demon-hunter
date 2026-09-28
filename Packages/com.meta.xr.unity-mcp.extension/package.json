@@ -1,0 +1,25 @@
+{
+  "name": "com.meta.xr.unity-mcp.extension",
+  "displayName": "Meta XR Unity MCP Extension",
+  "version": "2.12.0-pre.2",
+  "unity": "6000.0",
+  "unityRelease": "60f1",
+  "description": "Register Meta XR tools to Unity MCP.",
+  "dependencies": {
+    "com.unity.ai.assistant": "2.12.0-pre.2"
+  },
+  "documentationUrl": "README.md",
+  "changelogUrl": "CHANGELOG.md",
+  "licensesUrl": "https://developers.meta.com/horizon/licenses/oculussdk/",
+  "licenseMessage": "By adding or using this package you agree to the terms and conditions of the Meta Platforms Technologies SDK License Agreement: https://developers.meta.com/horizon/licenses/oculussdk/",
+  "keywords": [
+    "Oculus",
+    "Quest",
+    "XR",
+    "Meta",
+    "SDK",
+    "AI",
+    "MCP"
+  ],
+  "_fingerprint": "ac3dd9cdb2675cb0eee98655acb0731349fc6f9e"
+}

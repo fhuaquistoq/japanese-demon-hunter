@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "unity": {
+      "command": "${USERPROFILE}\\AppData\\Local\\Unity\\bin\\unity.exe",
+      "args": [
+        "mcp"
+      ]
+    },
+    "metavr": {
+      "command": "${USERPROFILE}\\.metavr\\bin\\metavr.exe",
+      "args": [
+        "mcp",
+        "server",
+        "--update"
+      ]
+    },
+    "meta-xr-operator": {
+      "command": "${USERPROFILE}\\meta-xr-operator\\meta-xr-operator-mcp-proxy.exe",
+      "args": []
+    }
+  }
+}
